@@ -5,7 +5,8 @@ enum RemoteConstants {
     static let bonjourType = "_ipadremote._tcp"
     static let defaultPort: UInt16 = 52800
     /// 2：iPad 會回報收到的影像幀（videoAck），Mac 以此限制在途幀數
-    static let protocolVersion = 2
+    /// 3：ECDHE-PSK 前向保密、每台 iPad 專屬裝置金鑰（identify / paired）
+    static let protocolVersion = 3
     static let pskIdentity = "iPadRemote-v1"
 }
 
@@ -103,6 +104,8 @@ enum StreamQuality: String, Codable, CaseIterable, Identifiable {
 
 /// iPad → Mac
 enum ClientMessage: Codable {
+    /// 已配對的 iPad 在 hello 之前送出，證明自己持有哪一把裝置金鑰；沒送的連線視為「用配對碼進行新配對」
+    case identify(deviceID: String, proof: Data)
     case hello(clientName: String, protocolVersion: Int, quality: StreamQuality, displayID: UInt32?)
     case ping(id: UInt64)
     /// 絕對座標，0...1 正規化於目前串流的螢幕
@@ -136,6 +139,8 @@ enum ServerMessage: Codable {
     case streamStarted(displayID: UInt32, pixelWidth: Int, pixelHeight: Int)
     case permissions(screenRecording: Bool, accessibility: Bool)
     case notice(String)
+    /// 新配對完成：Mac 發給這台 iPad 的專屬金鑰，之後連線改用它（配對碼隨即失效）
+    case paired(deviceID: String, key: Data)
 }
 
 // MARK: - Mac 虛擬鍵碼（對應 Carbon kVK_*）

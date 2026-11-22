@@ -24,11 +24,34 @@ struct SavedMac: Codable, Identifiable, Hashable {
     var lastConnected: Date?
     var quality: StreamQuality = .balanced
 
+    /// 尚未配對時使用的一次性配對碼（配對成功後即刪除）
     var pairingCode: String {
         Keychain.get(Self.keychainAccount(id)) ?? ""
     }
 
+    /// Mac 發給這台 iPad 的專屬金鑰（配對成功後才有）
+    var credential: DeviceCredential? {
+        guard let json = Keychain.get(Self.credentialAccount(id)) else { return nil }
+        return try? JSONDecoder().decode(DeviceCredential.self, from: Data(json.utf8))
+    }
+
+    var isPaired: Bool { credential != nil }
+    var canConnect: Bool { isPaired || PairingCode.isValid(pairingCode) }
+
     static func keychainAccount(_ id: UUID) -> String { "device-\(id.uuidString)" }
+    static func credentialAccount(_ id: UUID) -> String { "devicekey-\(id.uuidString)" }
+
+    /// 配對完成：存下裝置金鑰，刪除已失效的配對碼
+    static func storePairing(_ credential: DeviceCredential, for id: UUID) {
+        guard let data = try? JSONEncoder().encode(credential) else { return }
+        Keychain.set(String(decoding: data, as: UTF8.self), for: credentialAccount(id))
+        Keychain.delete(keychainAccount(id))
+    }
+}
+
+struct DeviceCredential: Codable, Equatable {
+    var deviceID: String
+    var key: Data
 }
 
 final class DeviceStore: ObservableObject {
@@ -45,8 +68,12 @@ final class DeviceStore: ObservableObject {
         }
     }
 
+    /// pairingCode 有效時 → 以新配對碼重新配對（舊的裝置金鑰作廢）；空白時保留現有配對
     func save(_ device: SavedMac, pairingCode: String) {
-        Keychain.set(PairingCode.format(pairingCode), for: SavedMac.keychainAccount(device.id))
+        if PairingCode.isValid(pairingCode) {
+            Keychain.set(PairingCode.format(pairingCode), for: SavedMac.keychainAccount(device.id))
+            Keychain.delete(SavedMac.credentialAccount(device.id))
+        }
         if let index = devices.firstIndex(where: { $0.id == device.id }) {
             devices[index] = device
         } else {
@@ -57,6 +84,7 @@ final class DeviceStore: ObservableObject {
 
     func delete(_ device: SavedMac) {
         Keychain.delete(SavedMac.keychainAccount(device.id))
+        Keychain.delete(SavedMac.credentialAccount(device.id))
         devices.removeAll { $0.id == device.id }
         persist()
     }

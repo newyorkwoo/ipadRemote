@@ -54,6 +54,9 @@ final class FakeMac {
         InputSourceInfo(id: "com.apple.inputmethod.Kotoeri.Japanese", name: "日文", isSelected: false),
     ]
     var currentSource: String { sources.first(where: \.isSelected)?.name ?? "-" }
+    /// 與真正的 Mac agent 相同：配對成功後發給 iPad 專屬金鑰（這裡不更換配對碼，方便重複執行測試）
+    var pairedKeys: [String: Data] = [:]
+    var identified: ObjectIdentifier?
 
     func start() {
         startListener()
@@ -63,13 +66,15 @@ final class FakeMac {
     // MARK: TCP（加密）
 
     func startListener() {
-        let params = SecureTransport.parameters(pairingCode: code)
+        listener?.cancel()
+        let credentials = [PSKCredential.pairing(code)] + pairedKeys.map { PSKCredential.device(id: $0.key, key: $0.value) }
+        let params = SecureTransport.parameters(credentials: credentials)
         params.allowLocalEndpointReuse = true
         let listener = try! NWListener(using: params, on: NWEndpoint.Port(rawValue: port)!)
         listener.service = NWListener.Service(name: "模擬 Mac", type: RemoteConstants.bonjourType,
                                               domain: nil, txtRecord: NWTXTRecord(["id": "fake-mac", "v": "1"]))
         listener.stateUpdateHandler = { state in
-            if case .ready = state { log("🟢 監聽中（TCP \(port)，TLS-PSK 加密）") }
+            if case .ready = state { log("🟢 監聽中（TCP \(port)，ECDHE-PSK 加密，已配對 \(self.pairedKeys.count) 台）") }
             if case .failed(let e) = state { log("❌ 監聽失敗：\(e)") }
         }
         listener.newConnectionHandler = { [weak self] c in self?.accept(c) }
@@ -103,8 +108,24 @@ final class FakeMac {
 
     func handle(_ m: ClientMessage, _ ch: MessageChannel) {
         switch m {
+        case let .identify(id, proof):
+            if let key = pairedKeys[id], let expected = SecureTransport.deviceProof(key: key, connection: ch.connection),
+               SecureTransport.constantTimeEqual(expected, proof) {
+                identified = ObjectIdentifier(ch)
+                log("🪪 已配對的 iPad 證明身分成功（\(id.prefix(8))…）")
+            } else {
+                log("⚠️ 裝置證明不正確")
+            }
         case let .hello(name, _, quality, _):
             log("👋 hello from \(name)，畫質 \(quality.title)")
+            if identified != ObjectIdentifier(ch) {
+                let id = UUID().uuidString
+                let key = PSKCredential.newDeviceKey()
+                pairedKeys[id] = key
+                ch.send(ServerMessage.paired(deviceID: id, key: key))
+                log("🔑 新配對：發給 iPad 專屬金鑰")
+                startListener()
+            }
             ch.send(ServerMessage.hello(HostInfo(
                 hostID: "fake-mac", computerName: "模擬 Mac", model: "Mac16,1", isLaptop: true,
                 macAddress: fakeMAC, otherMACAddresses: nil, ipv4: "127.0.0.1", broadcast: "127.255.255.255",

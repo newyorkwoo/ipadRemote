@@ -100,9 +100,13 @@ final class TestClient {
     var onAudio: ((Data) -> Void)?
     var onState: ((NWConnection.State) -> Void)?
 
-    init(code: String, port: UInt16) {
+    convenience init(code: String, port: UInt16) {
+        self.init(credential: .pairing(code), port: port)
+    }
+
+    init(credential: PSKCredential, port: UInt16) {
         connection = NWConnection(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: port)!,
-                                  using: SecureTransport.parameters(pairingCode: code))
+                                  using: SecureTransport.parameters(credentials: [credential]))
         channel = MessageChannel(connection: connection)
     }
 

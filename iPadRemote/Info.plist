@@ -24,6 +24,8 @@
 	<array>
 		<string>_ipadremote._tcp</string>
 	</array>
+	<key>NSFaceIDUsageDescription</key>
+	<string>使用 Face ID 解鎖 App，避免別人用你的 iPad 控制 Mac。</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>需要存取區域網路以尋找並連線到你的 Mac，以及送出喚醒封包。</string>
 	<key>UIApplicationSceneManifest</key>

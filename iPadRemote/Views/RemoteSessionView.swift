@@ -4,6 +4,7 @@ struct RemoteSessionView: View {
     @ObservedObject var client: RemoteClient
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @EnvironmentObject private var lock: AppLock
 
     @AppStorage("trackpadMode") private var trackpadMode = false
     @AppStorage("liveTyping") private var liveTyping = true
@@ -53,7 +54,12 @@ struct RemoteSessionView: View {
         .persistentSystemOverlays(.hidden)
         .animation(.spring(duration: 0.35), value: client.state)
         .animation(.spring(duration: 0.35), value: client.notice)
-        .onAppear { client.connect() }
+        .onAppear {
+            client.inputBlocked = lock.isLocked
+            client.connect()
+        }
+        // App 上鎖時不送出任何滑鼠、鍵盤、文字（硬體鍵盤的按鍵仍會送到遠端畫面元件，這裡一律擋下）
+        .onChange(of: lock.isLocked) { _, locked in client.inputBlocked = locked }
         .onDisappear { client.disconnect() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { client.appDidBecomeActive() }

@@ -11,6 +11,10 @@ final class InputInjector {
     var cursorLocation: () -> CGPoint = { CGEvent(source: nil)?.location ?? .zero }
     /// 左鍵按下時把被點到的視窗帶到最前面；測試時可替換
     var activateWindow: (CGPoint) -> Void = { WindowActivator.bringWindowToFront(at: $0) }
+    /// 貼上用的剪貼簿；測試時換成獨立剪貼簿，不會動到使用者的
+    var pasteboard: NSPasteboard = .general
+    /// 貼上後多久把剪貼簿還原
+    var pasteRestoreDelay: TimeInterval = 0.6
 
     private let source = CGEventSource(stateID: .hidSystemState)
     private var pressedButtons = Set<MouseButton>()
@@ -25,6 +29,7 @@ final class InputInjector {
     // MARK: 滑鼠
 
     func moveAbsolute(x: Double, y: Double) {
+        guard x.isFinite, y.isFinite else { return }
         let b = displayBounds
         let point = CGPoint(x: b.minX + clamp(x) * (b.width - 1),
                             y: b.minY + clamp(y) * (b.height - 1))
@@ -32,6 +37,7 @@ final class InputInjector {
     }
 
     func moveRelative(dx: Double, dy: Double) {
+        guard dx.isFinite, dy.isFinite else { return }
         let b = displayBounds
         var p = currentLocation
         p.x = min(max(p.x + dx * b.width, b.minX), b.maxX - 1)
@@ -60,7 +66,7 @@ final class InputInjector {
         let (type, cgButton) = eventType(for: button, down: down)
         guard let event = CGEvent(mouseEventSource: source, mouseType: type,
                                   mouseCursorPosition: location, mouseButton: cgButton) else { return }
-        event.setIntegerValueField(.mouseEventClickState, value: Int64(max(1, clickCount)))
+        event.setIntegerValueField(.mouseEventClickState, value: Int64(min(max(1, clickCount), 3)))
         event.flags = cgFlags(modifiers.union(heldModifiers))
         post(event)
         if down { pressedButtons.insert(button) } else { pressedButtons.remove(button) }
@@ -72,8 +78,13 @@ final class InputInjector {
     }
 
     func scroll(dx: Double, dy: Double) {
+        // 遠端送來的數值先檢查並限制範圍：超出 Int32 會讓程式直接當掉
+        guard dx.isFinite, dy.isFinite else { return }
+        let limit = 10_000.0
+        let wheel1 = Int32(min(max(dy, -limit), limit).rounded())
+        let wheel2 = Int32(min(max(dx, -limit), limit).rounded())
         let event = CGEvent(scrollWheelEvent2Source: source, units: .pixel, wheelCount: 2,
-                            wheel1: Int32(dy.rounded()), wheel2: Int32(dx.rounded()), wheel3: 0)
+                            wheel1: wheel1, wheel2: wheel2, wheel3: 0)
         event.map(post)
     }
 
@@ -128,18 +139,43 @@ final class InputInjector {
         }
     }
 
-    /// 透過剪貼簿 + ⌘V 貼上（適合長文字，或 Mac 端輸入法攔截 Unicode 事件時）
+    /// 剪貼簿管理工具（Maccy、Paste、Raycast…）的慣例：標記為機密、暫時的內容不記錄到歷史
+    static let concealedType = NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")
+    static let transientType = NSPasteboard.PasteboardType("org.nspasteboard.TransientType")
+
+    /// 透過剪貼簿 + ⌘V 貼上（適合長文字，或 Mac 端輸入法攔截 Unicode 事件時）。
+    /// 送出的文字可能是密碼，所以：
+    /// • 只放在這台 Mac（不經「通用剪貼板」同步到其他裝置）
+    /// • 標記為機密 / 暫時，剪貼簿工具不會記錄
+    /// • 貼上後一定還原成原本的內容（原本是空的就清空），不留在剪貼簿上
     func paste(_ text: String) {
-        let pasteboard = NSPasteboard.general
-        let previous = pasteboard.string(forType: .string)
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
+        let pasteboard = self.pasteboard
+        let saved: [[NSPasteboard.PasteboardType: Data]] = (pasteboard.pasteboardItems ?? []).map { item in
+            var entry: [NSPasteboard.PasteboardType: Data] = [:]
+            for type in item.types { entry[type] = item.data(forType: type) }
+            return entry
+        }
+
+        pasteboard.prepareForNewContents(with: .currentHostOnly)
+        let item = NSPasteboardItem()
+        item.setString(text, forType: .string)
+        item.setData(Data(), forType: Self.concealedType)
+        item.setData(Data(), forType: Self.transientType)
+        pasteboard.writeObjects([item])
+        let ourChange = pasteboard.changeCount
+
         keyPress(MacKey.v, modifiers: .command)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-            if let previous {
-                pasteboard.clearContents()
-                pasteboard.setString(previous, forType: .string)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + pasteRestoreDelay) {
+            // 期間如果使用者自己拷貝了別的東西，就不要覆蓋
+            guard pasteboard.changeCount == ourChange else { return }
+            pasteboard.clearContents()
+            let restored = saved.filter { !$0.isEmpty }.map { entry -> NSPasteboardItem in
+                let item = NSPasteboardItem()
+                for (type, data) in entry { item.setData(data, forType: type) }
+                return item
             }
+            if !restored.isEmpty { pasteboard.writeObjects(restored) }
         }
     }
 

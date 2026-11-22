@@ -7,10 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		08F236DDA70EEF5BB7DFE0BA /* PairedDevices.swift in Sources */ = {isa = PBXBuildFile; fileRef = E48E5AF727C97E3764AB2570 /* PairedDevices.swift */; };
 		0C86113A2A7E2B96B596C767 /* TestHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25A2217DEA9337AFEF73BE04 /* TestHelpers.swift */; };
 		142A06730E802E0BA990FD33 /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = A58108BCEAC602FE2F326BEF /* Keychain.swift */; };
 		1954B097059869C1B0A7B5BD /* MessageChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16533C7B311445516CA3A7C5 /* MessageChannel.swift */; };
 		1D09BD6545F3ACCF68C0E64B /* ClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED3EBF3160221EA31D507FB7 /* ClientTests.swift */; };
+		1D96D2BEADD3A968E84BDC06 /* PairedDevices.swift in Sources */ = {isa = PBXBuildFile; fileRef = E48E5AF727C97E3764AB2570 /* PairedDevices.swift */; };
 		2137FD01794BEC438559273D /* InputInjector.swift in Sources */ = {isa = PBXBuildFile; fileRef = A84D1A3E31E27254305B8553 /* InputInjector.swift */; };
 		26AA69B63766C948681B4A85 /* SystemInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8948AFC2BBFB05342134FA81 /* SystemInfo.swift */; };
 		29AAF0BFF9ACE53D2381FA50 /* AgentController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8753CCF1B7FAF0BD3E0DE88F /* AgentController.swift */; };
@@ -26,6 +28,7 @@
 		554489F0CED11B6A35333299 /* SecureTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54AB2732E21DF3ECC5A4B965 /* SecureTransport.swift */; };
 		599964ABDA184614D271AA0C /* MessageChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16533C7B311445516CA3A7C5 /* MessageChannel.swift */; };
 		59E7C60890B9C3DDE3E39244 /* ProtocolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3B9F5A2A93502D8D3E5787A /* ProtocolTests.swift */; };
+		5BF020D0A686026CC52AE6E8 /* AppLock.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4B62F1C37028E287C11AC9E /* AppLock.swift */; };
 		5C58F7979871F307AC3D8544 /* GlassStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 298793FC76AE8905C58BFA69 /* GlassStyle.swift */; };
 		5E5D37E24B37239B323E50A6 /* SecureChannelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1B431AD9787E1269E9408C5 /* SecureChannelTests.swift */; };
 		6BC8DCAF5EF672ACF05138DA /* Framing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 287288382D265C12B460059F /* Framing.swift */; };
@@ -39,6 +42,7 @@
 		8626EC4F68D42E01DECA8DE5 /* SecureTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54AB2732E21DF3ECC5A4B965 /* SecureTransport.swift */; };
 		89FA5F5332D10C64387EEAC8 /* VideoPacket.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4BF64E2D60B9F34F6D1F306 /* VideoPacket.swift */; };
 		8ADE1B56E640546BAAA89B86 /* RemoteFlowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45BBA8EB575CC0A88FE670E2 /* RemoteFlowUITests.swift */; };
+		8E67C653AAFF678DF0796AC9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 8BEBA8491699CCB4311F8F68 /* Assets.xcassets */; };
 		8ECF241877BBEC557D217457 /* Locked.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB533AACBA66498B47A3CB15 /* Locked.swift */; };
 		8EEB800053989936186B0A34 /* Locked.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB533AACBA66498B47A3CB15 /* Locked.swift */; };
 		91C14058E78CD7132CBA4F46 /* WindowActivator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 355491E096DED9DB82858DD0 /* WindowActivator.swift */; };
@@ -47,6 +51,7 @@
 		A0D7509633FD7C12A272D611 /* InputSourceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A09A57144140739F4BEF25A /* InputSourceManager.swift */; };
 		A7F3B9DE98B7482A36C80BE6 /* H264Encoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BC04C77670BAE56EFFF4312 /* H264Encoder.swift */; };
 		A9833D593B7D16DA0B3D7DC9 /* KeyMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EBFB7DC55206ABBF3DC3867 /* KeyMap.swift */; };
+		AA6958259DFE940F9D1757EC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9F149A69F9E768E23439FC70 /* Assets.xcassets */; };
 		AB1EBC4D31C3370A448E8E7F /* InputSourceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A09A57144140739F4BEF25A /* InputSourceManager.swift */; };
 		ABE00C00C2165B802EA7B32B /* SystemInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8948AFC2BBFB05342134FA81 /* SystemInfo.swift */; };
 		AC3B30769654946428277BF8 /* RemoteSessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 246CD4F1BE4F4481D02EFB7F /* RemoteSessionView.swift */; };
@@ -118,7 +123,9 @@
 		8042F236626D619C1CCA1029 /* MacSystemTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacSystemTests.swift; sourceTree = "<group>"; };
 		8753CCF1B7FAF0BD3E0DE88F /* AgentController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentController.swift; sourceTree = "<group>"; };
 		8948AFC2BBFB05342134FA81 /* SystemInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemInfo.swift; sourceTree = "<group>"; };
+		8BEBA8491699CCB4311F8F68 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		9A09A57144140739F4BEF25A /* InputSourceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputSourceManager.swift; sourceTree = "<group>"; };
+		9F149A69F9E768E23439FC70 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A0AB10534379AD1CC0625C29 /* LiveTextField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTextField.swift; sourceTree = "<group>"; };
 		A58108BCEAC602FE2F326BEF /* Keychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keychain.swift; sourceTree = "<group>"; };
 		A815A3872208F37D4B770A27 /* RemoteCanvasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteCanvasView.swift; sourceTree = "<group>"; };
@@ -126,10 +133,12 @@
 		B1B431AD9787E1269E9408C5 /* SecureChannelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureChannelTests.swift; sourceTree = "<group>"; };
 		B43EF7DE63EEA5C1EAD69F85 /* VideoRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoRenderer.swift; sourceTree = "<group>"; };
 		B48A54EFE913430F26D4EB6D /* iPadRemoteUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = iPadRemoteUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B4B62F1C37028E287C11AC9E /* AppLock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLock.swift; sourceTree = "<group>"; };
 		B4BF64E2D60B9F34F6D1F306 /* VideoPacket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoPacket.swift; sourceTree = "<group>"; };
 		B8C2B7C6E791410D8D762D67 /* iPadRemoteApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iPadRemoteApp.swift; sourceTree = "<group>"; };
 		D139D0C3A08A1FD46C92E80D /* DeviceEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceEditorView.swift; sourceTree = "<group>"; };
 		DE77512A18C7ABD1A1D71E1D /* h264_1280x720.bin */ = {isa = PBXFileReference; lastKnownFileType = archive.macbinary; path = h264_1280x720.bin; sourceTree = "<group>"; };
+		E48E5AF727C97E3764AB2570 /* PairedDevices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairedDevices.swift; sourceTree = "<group>"; };
 		EAF75F6A5DACC42C00F2AD0D /* AudioTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioTests.swift; sourceTree = "<group>"; };
 		ED3EBF3160221EA31D507FB7 /* ClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClientTests.swift; sourceTree = "<group>"; };
 		F0228484B08C0D516E21B494 /* Protocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Protocol.swift; sourceTree = "<group>"; };
@@ -238,6 +247,7 @@
 		D67244F79479FB73EAD96AEE /* iPadRemote */ = {
 			isa = PBXGroup;
 			children = (
+				8BEBA8491699CCB4311F8F68 /* Assets.xcassets */,
 				6C24B1D09167E05C9E51A7FD /* Info.plist */,
 				5F94085571CFA64098BB83D7 /* iPadRemote.entitlements */,
 				B8C2B7C6E791410D8D762D67 /* iPadRemoteApp.swift */,
@@ -253,6 +263,7 @@
 		DB057395F68BB1E9378DA3CC /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				B4B62F1C37028E287C11AC9E /* AppLock.swift */,
 				D139D0C3A08A1FD46C92E80D /* DeviceEditorView.swift */,
 				0EF2A037E775A7D3932B44E2 /* DeviceListView.swift */,
 				298793FC76AE8905C58BFA69 /* GlassStyle.swift */,
@@ -292,12 +303,14 @@
 			isa = PBXGroup;
 			children = (
 				8753CCF1B7FAF0BD3E0DE88F /* AgentController.swift */,
+				9F149A69F9E768E23439FC70 /* Assets.xcassets */,
 				2BC04C77670BAE56EFFF4312 /* H264Encoder.swift */,
 				6F2ACE6C64FE3233724F6780 /* Info.plist */,
 				A84D1A3E31E27254305B8553 /* InputInjector.swift */,
 				9A09A57144140739F4BEF25A /* InputSourceManager.swift */,
 				0707360C3A535D1BFEDE0C1B /* MacAgent.entitlements */,
 				7C1CD96B613D0EAC5676FF3D /* MacAgentApp.swift */,
+				E48E5AF727C97E3764AB2570 /* PairedDevices.swift */,
 				F5622AFD114398B13C11EFB9 /* RemoteServer.swift */,
 				3DFB2BCBE37624DD6620C6CB /* ScreenStreamer.swift */,
 				8948AFC2BBFB05342134FA81 /* SystemInfo.swift */,
@@ -350,6 +363,7 @@
 			buildConfigurationList = 17DB6C3AF8E5B1D8558EC3AB /* Build configuration list for PBXNativeTarget "iPadRemote" */;
 			buildPhases = (
 				ABFC17EF3DC424A2337E6F94 /* Sources */,
+				94FF91D92376437ACF327E79 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -385,6 +399,7 @@
 			buildConfigurationList = 72D8425C7E0694D32F5E6D5D /* Build configuration list for PBXNativeTarget "MacAgent" */;
 			buildPhases = (
 				8416CE9A518A24E41159FC88 /* Sources */,
+				E1B8593DE8E4DF8D4C4B7DC2 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -462,6 +477,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		94FF91D92376437ACF327E79 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8E67C653AAFF678DF0796AC9 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E1B8593DE8E4DF8D4C4B7DC2 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA6958259DFE940F9D1757EC /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -487,6 +518,7 @@
 				8ECF241877BBEC557D217457 /* Locked.swift in Sources */,
 				CBC53D673518CAC10D6B97DC /* MacSystemTests.swift in Sources */,
 				599964ABDA184614D271AA0C /* MessageChannel.swift in Sources */,
+				08F236DDA70EEF5BB7DFE0BA /* PairedDevices.swift in Sources */,
 				40A40E94EA9EFF2B83212067 /* Protocol.swift in Sources */,
 				59E7C60890B9C3DDE3E39244 /* ProtocolTests.swift in Sources */,
 				ADA9A3DF99A619BFFC2F15D0 /* RemoteServer.swift in Sources */,
@@ -514,6 +546,7 @@
 				C0E66804EC2AE6B2C2387784 /* Locked.swift in Sources */,
 				3A7434EB4F6737D01BF00A9A /* MacAgentApp.swift in Sources */,
 				1954B097059869C1B0A7B5BD /* MessageChannel.swift in Sources */,
+				1D96D2BEADD3A968E84BDC06 /* PairedDevices.swift in Sources */,
 				FD8010E57028A4A9A04A69A2 /* Protocol.swift in Sources */,
 				FA955C8075AF17A336B2F582 /* RemoteServer.swift in Sources */,
 				36285C59232A2503C46873F2 /* ScreenStreamer.swift in Sources */,
@@ -528,6 +561,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5BF020D0A686026CC52AE6E8 /* AppLock.swift in Sources */,
 				996CD304FA95952FE2013AE7 /* AudioCodec.swift in Sources */,
 				3679EF28EE856D851F4CB8A8 /* AudioPlayer.swift in Sources */,
 				749C4EDEB28C0525FD7714F0 /* DeviceEditorView.swift in Sources */,

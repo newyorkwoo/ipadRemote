@@ -37,6 +37,7 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         NSLocalNetworkUsageDescription: 需要存取區域網路以尋找並連線到你的 Mac，以及送出喚醒封包。
+        NSFaceIDUsageDescription: 使用 Face ID 解鎖 App，避免別人用你的 iPad 控制 Mac。
         NSBonjourServices:
           - _ipadremote._tcp
     settings:
@@ -84,6 +85,7 @@ targets:
           - AgentController.swift
           - "*.plist"
           - "*.entitlements"
+          - Assets.xcassets
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.steven.ipadremote.maccoretests

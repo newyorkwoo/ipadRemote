@@ -13,7 +13,8 @@ final class RemoteFlowUITests: XCTestCase {
     override func setUp() {
         continueAfterFailure = false
         app = XCUIApplication()
-        app.launchArguments = ["-uiTestReset"]
+        // 模擬器有設定密碼時 App 鎖會啟動；UI 測試以 UserDefaults 參數關閉 App 鎖（App 鎖本身另有單元測試）
+        app.launchArguments = ["-uiTestReset", "-appLockEnabled", "NO"]
         app.launch()
     }
 

@@ -21,6 +21,14 @@ final class SimulatedMac {
     var silent = false
     /// hello 中回報給 iPad 的位址（模擬 Mac 有區網 IP + Tailscale IP）
     var addresses: [String]? = nil
+    /// 與真正的 Mac 相同：用配對碼連線並送 hello → 發給 iPad 專屬裝置金鑰（事先產生，監聽時就已接受）
+    let deviceID = "sim-device-\(UUID().uuidString.prefix(8))"
+    let deviceKey = PSKCredential.newDeviceKey()
+    /// false 時模擬「Mac 已移除這台 iPad」：不再接受裝置金鑰
+    var acceptsDeviceKey = true
+    private var identified = Set<ObjectIdentifier>()
+    private(set) var pairingsIssued = 0
+    private(set) var verifiedIdentities = 0
 
     var received: [ClientMessage] { lock.withLock { _received } }
 
@@ -41,7 +49,9 @@ final class SimulatedMac {
 
     func start() {
         let ready = DispatchSemaphore(value: 0)
-        let params = SecureTransport.parameters(pairingCode: code)
+        var credentials = [PSKCredential.pairing(code)]
+        if acceptsDeviceKey { credentials.append(.device(id: deviceID, key: deviceKey)) }
+        let params = SecureTransport.parameters(credentials: credentials)
         params.allowLocalEndpointReuse = true
         let listener = try! NWListener(using: params, on: NWEndpoint.Port(rawValue: port)!)
         listener.newConnectionHandler = { [weak self] connection in self?.accept(connection) }
@@ -73,7 +83,21 @@ final class SimulatedMac {
             self.lock.withLock { self._received.append(message) }
             guard !self.silent else { return }
             switch message {
+            case let .identify(id, proof):
+                if id == self.deviceID,
+                   let expected = SecureTransport.deviceProof(key: self.deviceKey, connection: channel.connection),
+                   SecureTransport.constantTimeEqual(expected, proof) {
+                    self.lock.withLock {
+                        self.identified.insert(ObjectIdentifier(channel))
+                        self.verifiedIdentities += 1
+                    }
+                }
             case .hello:
+                let known = self.lock.withLock { self.identified.contains(ObjectIdentifier(channel)) }
+                if !known {
+                    self.lock.withLock { self.pairingsIssued += 1 }
+                    channel.send(ServerMessage.paired(deviceID: self.deviceID, key: self.deviceKey))
+                }
                 channel.send(ServerMessage.hello(HostInfo(
                     hostID: "sim-host", computerName: "模擬 Mac", model: "Mac16,1", isLaptop: true,
                     macAddress: self.mac, otherMACAddresses: ["AA:BB:CC:00:11:99"],
@@ -193,7 +217,7 @@ final class RemoteClientTests: XCTestCase {
         XCTAssertEqual(learned?.macAddress, mac.mac, "第一次連線就要記住 MAC 位址供日後喚醒")
         XCTAssertEqual(client.device.macAddress, mac.mac)
         XCTAssertEqual(client.device.otherMACAddresses, ["AA:BB:CC:00:11:99"])
-        if case let .hello(_, version, quality, _) = mac.received.first {
+        if case let .hello(_, version, quality, _) = mac.received.first(where: { if case .hello = $0 { return true }; return false }) {
             XCTAssertEqual(version, RemoteConstants.protocolVersion)
             XCTAssertEqual(quality, .balanced)
         } else {
@@ -374,6 +398,88 @@ final class RemoteClientTests: XCTestCase {
             return false
         }
         XCTAssertTrue(mac.received.isEmpty, "配對碼錯誤時 Mac 不應收到任何指令")
+    }
+
+    // MARK: 安全：一次性配對碼 → 專屬裝置金鑰
+
+    func testFirstConnectionPairsThenReconnectsWithDeviceKeyOnly() {
+        let mac = SimulatedMac(code: code, port: port)
+        mac.start()
+        defer { mac.sleep() }
+        let device = makeDevice(code: code, port: port)
+        let client = RemoteClient(device: device, browser: BonjourBrowser())
+        client.connect()
+        waitUntil("連線", timeout: 5) { client.state == .connected }
+        waitUntil("收到裝置金鑰", timeout: 3) { device.isPaired }
+        XCTAssertEqual(device.credential?.deviceID, mac.deviceID)
+        XCTAssertEqual(device.pairingCode, "", "配對成功後，已失效的配對碼要從鑰匙圈刪除")
+        client.disconnect()
+
+        // 配對碼已從 iPad 刪除，只剩裝置金鑰：仍能連上，且證明身分、不會重新配對
+        mac.sleep()
+        RunLoop.main.run(until: Date().addingTimeInterval(1))   // 等連接埠釋放
+        mac.start()
+        let again = RemoteClient(device: device, browser: BonjourBrowser())
+        again.connect()
+        defer { again.disconnect() }
+        waitUntil("用裝置金鑰重新連線", timeout: 5) { again.state == .connected }
+        XCTAssertEqual(mac.pairingsIssued, 1, "已配對的 iPad 不應再配對一次")
+        XCTAssertEqual(mac.verifiedIdentities, 1, "重連時應送出正確的裝置證明")
+        Keychain.delete(SavedMac.credentialAccount(device.id))
+    }
+
+    func testRemovedDeviceStopsWithClearError() {
+        let mac = SimulatedMac(code: code, port: port)
+        mac.start()
+        defer { mac.sleep() }
+        let device = makeDevice(code: code, port: port)
+        let client = RemoteClient(device: device, browser: BonjourBrowser())
+        client.connect()
+        waitUntil("配對", timeout: 5) { client.state == .connected && device.isPaired }
+        client.disconnect()
+
+        mac.sleep()
+        RunLoop.main.run(until: Date().addingTimeInterval(1))   // 等連接埠釋放
+        mac.acceptsDeviceKey = false     // Mac 上移除了這台 iPad
+        mac.start()
+        let again = RemoteClient(device: device, browser: BonjourBrowser())
+        again.connect()
+        defer { again.disconnect() }
+        waitUntil("提示已被移除、需重新配對", timeout: 10) {
+            if case .failed(let message) = again.state { return message.contains("移除") }
+            return false
+        }
+        Keychain.delete(SavedMac.credentialAccount(device.id))
+    }
+
+    func testInputIsNotSentWhileAppIsLocked() {
+        let mac = SimulatedMac(code: code, port: port)
+        mac.start()
+        defer { mac.sleep() }
+        let device = makeDevice(code: code, port: port)
+        let client = RemoteClient(device: device, browser: BonjourBrowser())
+        client.connect()
+        defer {
+            client.disconnect()
+            Keychain.delete(SavedMac.credentialAccount(device.id))
+        }
+        waitUntil("連線", timeout: 5) { client.state == .connected }
+
+        client.inputBlocked = true
+        client.send(.text("鎖定中打的字", usePaste: false))
+        client.send(.keyPress(keyCode: 0, modifiers: []))
+        client.send(.click(button: .left, clickCount: 1, modifiers: []))
+        client.send(.requestKeyframe)   // 非輸入類訊息照常送出
+        client.inputBlocked = false
+        client.send(.text("解鎖後", usePaste: false))
+        waitUntil("解鎖後的輸入送達", timeout: 3) {
+            mac.received.contains { if case .text("解鎖後", _) = $0 { return true }; return false }
+        }
+        let received = mac.received
+        XCTAssertFalse(received.contains { if case .text("鎖定中打的字", _) = $0 { return true }; return false })
+        XCTAssertFalse(received.contains { if case .keyPress = $0 { return true }; return false })
+        XCTAssertFalse(received.contains { if case .click = $0 { return true }; return false })
+        XCTAssertTrue(received.contains { if case .requestKeyframe = $0 { return true }; return false })
     }
 
     func testUserDisconnectStopsReconnecting() {
@@ -597,7 +703,7 @@ final class LowLatencyTests: XCTestCase {
         client.connect()
         defer { client.disconnect() }
         waitUntil("連線", timeout: 5) { client.state == .connected }
-        if case let .hello(_, version, _, _) = mac.received.first {
+        if case let .hello(_, version, _, _) = mac.received.first(where: { if case .hello = $0 { return true }; return false }) {
             XCTAssertGreaterThanOrEqual(version, 2, "要宣告支援流量控制")
         }
 

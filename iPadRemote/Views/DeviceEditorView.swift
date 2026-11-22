@@ -19,7 +19,9 @@ struct DeviceEditorView: View {
     }
 
     private var canSave: Bool {
-        !device.name.trimmingCharacters(in: .whitespaces).isEmpty && PairingCode.isValid(code)
+        guard !device.name.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
+        // 已配對的 Mac 可以不填配對碼；填了就代表要重新配對
+        return PairingCode.isValid(code) || (code.isEmpty && device.isPaired)
     }
 
     var body: some View {
@@ -28,7 +30,7 @@ struct DeviceEditorView: View {
                 Section {
                     TextField("名稱", text: $device.name)
                         .accessibilityIdentifier("field.name")
-                    TextField("XXXXX-XXXXX-XXXXX-XXXXX", text: $code)
+                    TextField(device.isPaired ? "已配對（重新配對時才需填寫）" : "XXXXX-XXXXX-XXXXX-XXXXX", text: $code)
                         .accessibilityIdentifier("field.code")
                         .font(.body.monospaced())
                         .textInputAutocapitalization(.characters)
@@ -45,7 +47,9 @@ struct DeviceEditorView: View {
                     if !code.isEmpty && !PairingCode.isValid(code) {
                         Text("配對碼應為 20 個字元。").foregroundStyle(.red)
                     } else {
-                        Text("在 Mac 選單列點 iPad Remote 圖示即可看到配對碼。配對碼只存在這台 iPad 的鑰匙圈中。")
+                        Text(device.isPaired
+                             ? "已配對：這台 iPad 使用 Mac 發給它的專屬金鑰連線。只有在 Mac 上移除了這台 iPad 時，才需要輸入新的配對碼重新配對。"
+                             : "在 Mac 選單列點 iPad Remote 圖示即可看到配對碼。配對碼只能使用一次，配對成功後 Mac 會發給這台 iPad 專屬金鑰，存在鑰匙圈中。")
                     }
                 }
 
@@ -64,7 +68,7 @@ struct DeviceEditorView: View {
                 } header: {
                     Text("從不同網路連線")
                 } footer: {
-                    Text("iPad 與 Mac 在不同 Wi‑Fi 時：建議在兩台都安裝 Tailscale，然後填入 Mac 選單列顯示的 Tailscale 位址（100.x.x.x）。成功連線一次後，App 會記住 Mac 的所有位址，之後換到任何網路都會自動嘗試。也可以填 DDNS / 公網 IP（需在路由器轉發 TCP 連接埠）。")
+                    Text("iPad 與 Mac 在不同 Wi‑Fi 時：請在兩台都安裝 Tailscale，然後填入 Mac 選單列顯示的 Tailscale 位址（100.x.x.x）。成功連線一次後，App 會記住 Mac 的所有位址，之後換到任何網路都會自動嘗試。不建議在路由器轉發連接埠（DDNS / 公網 IP），那會讓 Mac 直接暴露在網際網路上。")
                 }
 
                 Section {

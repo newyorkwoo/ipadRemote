@@ -224,6 +224,74 @@ final class InputInjectorTests: XCTestCase {
         XCTAssertEqual(String(utf16CodeUnits: typed, count: typed.count), text)
         XCTAssertEqual(events.filter { $0.type == .keyUp }.count, events.filter { $0.type == .keyDown }.count)
     }
+
+    // MARK: 安全：遠端送來的異常數值不可讓 Mac 端當掉
+
+    func testHugeOrInvalidNumbersDoNotCrash() {
+        injector.scroll(dx: 1e300, dy: -1e300)
+        injector.scroll(dx: .infinity, dy: .nan)
+        injector.moveAbsolute(x: .nan, y: 0.5)
+        injector.moveRelative(dx: .infinity, dy: 0)
+        injector.click(.left, clickCount: Int.max, modifiers: [])
+        let scrolls = events.filter { $0.type == .scrollWheel }
+        XCTAssertEqual(scrolls.count, 1, "非有限值應直接略過")
+        XCTAssertEqual(scrolls[0].getIntegerValueField(.scrollWheelEventPointDeltaAxis1), -10_000, "應夾在合理範圍內")
+        XCTAssertFalse(events.contains { $0.type == .mouseMoved }, "NaN / 無限大的移動應略過")
+        XCTAssertEqual(events.first { $0.type == .leftMouseDown }?.getIntegerValueField(.mouseEventClickState), 3)
+    }
+
+    // MARK: 安全：貼上的文字（可能是密碼）不可留在剪貼簿
+
+    private func waitForRestore() {
+        let restored = expectation(description: "restored")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { restored.fulfill() }
+        wait(for: [restored], timeout: 2)
+    }
+
+    func testPasteIsConcealedAndClearedWhenClipboardWasEmpty() {
+        let board = NSPasteboard(name: .init("ipadremote-test-\(UUID().uuidString)"))
+        defer { board.releaseGlobally() }
+        board.clearContents()
+        injector.pasteboard = board
+        injector.pasteRestoreDelay = 0.1
+
+        injector.paste("my-secret-password")
+        XCTAssertEqual(board.string(forType: .string), "my-secret-password")
+        XCTAssertTrue(board.types?.contains(InputInjector.concealedType) == true, "應標記為機密，剪貼簿工具不記錄")
+        XCTAssertTrue(board.types?.contains(InputInjector.transientType) == true)
+        XCTAssertEqual(events.filter { $0.type == .keyDown }.last?.flags.contains(.maskCommand), true, "應送出 ⌘V")
+
+        waitForRestore()
+        XCTAssertNil(board.string(forType: .string), "原本是空的剪貼簿，貼上後必須清空")
+    }
+
+    func testPasteRestoresPreviousClipboardContents() {
+        let board = NSPasteboard(name: .init("ipadremote-test-\(UUID().uuidString)"))
+        defer { board.releaseGlobally() }
+        board.clearContents()
+        board.setString("使用者原本拷貝的內容", forType: .string)
+        injector.pasteboard = board
+        injector.pasteRestoreDelay = 0.1
+
+        injector.paste("secret")
+        waitForRestore()
+        XCTAssertEqual(board.string(forType: .string), "使用者原本拷貝的內容")
+        XCTAssertFalse(board.types?.contains(InputInjector.concealedType) == true)
+    }
+
+    func testPasteDoesNotClobberSomethingCopiedMeanwhile() {
+        let board = NSPasteboard(name: .init("ipadremote-test-\(UUID().uuidString)"))
+        defer { board.releaseGlobally() }
+        board.clearContents()
+        injector.pasteboard = board
+        injector.pasteRestoreDelay = 0.1
+
+        injector.paste("secret")
+        board.clearContents()
+        board.setString("使用者剛拷貝的新內容", forType: .string)
+        waitForRestore()
+        XCTAssertEqual(board.string(forType: .string), "使用者剛拷貝的新內容")
+    }
 }
 
 /// 讀取 Mac 系統資訊（唯讀，不會改變你的設定）

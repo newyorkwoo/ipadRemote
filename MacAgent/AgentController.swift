@@ -2,12 +2,14 @@ import Foundation
 import AppKit
 import ServiceManagement
 import Combine
+import UserNotifications
 
 final class AgentController: ObservableObject {
     @Published private(set) var pairingCode: String
     @Published private(set) var status = "啟動中…"
     @Published private(set) var statusOK = false
     @Published private(set) var connectedClient: String?
+    @Published private(set) var pairedDevices: [PairedDevice] = []
     @Published private(set) var hasScreenPermission = false
     @Published private(set) var hasAccessibilityPermission = false
     @Published private(set) var network: SystemInfo.NetworkInterface?
@@ -27,9 +29,11 @@ final class AgentController: ObservableObject {
 
     let port: UInt16
     let hostID: String
-    private let server = RemoteServer()
+    private let devices = PairedDeviceStore(keychainAccount: "mac-paired-devices")
+    private lazy var server = RemoteServer(devices: devices)
     private let power = PowerManager()
     private var observers: [NSObjectProtocol] = []
+    private var clipboardClearWork: DispatchWorkItem?
 
     private static let codeAccount = "mac-pairing-code"
 
@@ -59,7 +63,23 @@ final class AgentController: ObservableObject {
             self?.status = message
             self?.statusOK = ok
         }
-        server.onClientChanged = { [weak self] name in self?.connectedClient = name }
+        server.onClientChanged = { [weak self] name in
+            guard let self else { return }
+            let previous = self.connectedClient
+            self.connectedClient = name
+            if let name, name != previous { Self.notify("「\(name)」開始控制這台 Mac", body: "如果不是你，請從選單列的 iPad Remote 中斷連線並移除這台 iPad。") }
+        }
+        server.onPairingCodeChanged = { [weak self] code in
+            guard let self else { return }
+            self.pairingCode = code
+            Keychain.set(code, for: Self.codeAccount)
+        }
+        server.onPaired = { [weak self] device in
+            self?.pairedDevices = self?.devices.all ?? []
+            Self.notify("已配對新的 iPad：\(device.name)", body: "配對碼已自動更換。如果不是你，請在選單列移除這台 iPad。")
+        }
+        pairedDevices = devices.all
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
         server.hostInfoProvider = { [weak self] in self?.makeHostInfo() ?? Self.emptyHostInfo }
 
         refresh()
@@ -88,6 +108,7 @@ final class AgentController: ObservableObject {
         network = SystemInfo.primaryInterface()
         addresses = SystemInfo.reachableIPv4Addresses()
         onACPower = power.isOnACPower
+        pairedDevices = devices.all
         syncLaunchAtLogin()
     }
 
@@ -96,16 +117,48 @@ final class AgentController: ObservableObject {
                      serviceName: SystemInfo.computerName, hostID: hostID)
     }
 
+    /// 換新配對碼：舊碼立即失效；已配對的 iPad 使用自己的金鑰，不受影響
     func regeneratePairingCode() {
         pairingCode = PairingCode.generate()
         Keychain.set(pairingCode, for: Self.codeAccount)
-        server.disconnectClient()
-        startServer()
+        server.updatePairingCode(pairingCode)
     }
 
+    /// 移除一台 iPad：它的金鑰刪除、連線中斷，之後必須用新的配對碼重新配對
+    func removeDevice(_ device: PairedDevice) {
+        server.removeDevice(id: device.id)
+        pairedDevices.removeAll { $0.id == device.id }
+    }
+
+    /// 從 Mac 端立即中斷目前的遠端控制
+    func disconnectClient() {
+        server.disconnectClient()
+    }
+
+    /// 拷貝配對碼：只放在這台 Mac（不經通用剪貼板同步）、標記為機密，60 秒後自動清除
     func copyPairingCode() {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(pairingCode, forType: .string)
+        let pasteboard = NSPasteboard.general
+        pasteboard.prepareForNewContents(with: .currentHostOnly)
+        let item = NSPasteboardItem()
+        item.setString(pairingCode, forType: .string)
+        item.setData(Data(), forType: InputInjector.concealedType)
+        pasteboard.writeObjects([item])
+        let change = pasteboard.changeCount
+        clipboardClearWork?.cancel()
+        let work = DispatchWorkItem {
+            if pasteboard.changeCount == change { pasteboard.clearContents() }
+        }
+        clipboardClearWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 60, execute: work)
+    }
+
+    private static func notify(_ title: String, body: String) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
     }
 
     func requestScreenPermission() {

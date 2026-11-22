@@ -10,6 +10,7 @@ struct EditorTarget: Identifiable {
 struct DeviceListView: View {
     @EnvironmentObject private var store: DeviceStore
     @EnvironmentObject private var browser: BonjourBrowser
+    @EnvironmentObject private var lock: AppLock
     @State private var editing: EditorTarget?
     @State private var session: SavedMac?
     @State private var toast: String?
@@ -59,6 +60,9 @@ struct DeviceListView: View {
             .background(Color(.systemGroupedBackground))
             .navigationTitle("我的 Mac")
             .toolbar {
+                ToolbarItem(placement: .secondaryAction) {
+                    Toggle("開啟 App 時需要 \(AppLock.biometryName)", isOn: $lock.enabled)
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         editing = EditorTarget(device: SavedMac(name: ""), pairingCode: "", isNew: true)
@@ -72,6 +76,8 @@ struct DeviceListView: View {
             }
             .fullScreenCover(item: $session) { device in
                 SessionContainer(device: device)
+                    .appLockOverlay()
+                    .environmentObject(lock)
             }
             .confirmationDialog("刪除「\(deleting?.name ?? "")」？", isPresented: Binding(
                 get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {

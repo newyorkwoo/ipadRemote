@@ -2,13 +2,21 @@ import Foundation
 import Network
 import AppKit
 
-/// 監聽 iPad 連線（Bonjour + 固定埠，可在路由器做 Port Forwarding）
+/// 監聽 iPad 連線（Bonjour + 固定埠）。
+/// 跨網路請用 Tailscale；不建議在路由器做 Port Forwarding，那會把這個埠直接暴露在網際網路上。
 final class RemoteServer {
     var onStatus: ((String, Bool) -> Void)?        // (訊息, 是否正常)
     var onClientChanged: ((String?) -> Void)?
+    /// 有新的 iPad 完成配對（主執行緒）
+    var onPaired: ((PairedDevice) -> Void)?
+    /// 配對成功後配對碼自動更換（一次性配對碼），新碼於主執行緒回報
+    var onPairingCodeChanged: ((String) -> Void)?
     var hostInfoProvider: (() -> HostInfo)?
+    let devices: PairedDeviceStore
     /// 測試時關閉螢幕擷取（避免觸發系統權限視窗）
     var streamingEnabled = true
+    /// 測試用：替換每條連線的輸入注入器（收集事件，不真的動到滑鼠鍵盤）
+    var configureInjector: ((InputInjector) -> Void)?
 
     private let queue = DispatchQueue(label: "ipadremote.server", qos: .userInteractive)
     private var listener: NWListener?
@@ -17,6 +25,12 @@ final class RemoteServer {
     private let power = PowerManager()
     private var config: (code: String, port: UInt16, name: String, hostID: String)?
     private var restartWork: DispatchWorkItem?
+    private var stoppingListener: NWListener?
+    private var startAfterStop = false
+
+    init(devices: PairedDeviceStore = PairedDeviceStore(keychainAccount: nil)) {
+        self.devices = devices
+    }
 
     func start(pairingCode: String, port: UInt16, serviceName: String, hostID: String) {
         queue.async {
@@ -30,7 +44,7 @@ final class RemoteServer {
         queue.async { self.startListener() }
     }
 
-    /// 更換配對碼：中斷現有連線並以新金鑰重新監聽
+    /// 中斷目前所有連線（已配對的 iPad 之後仍可重新連入）
     func disconnectClient() {
         queue.async {
             self.session?.cancel()
@@ -38,13 +52,59 @@ final class RemoteServer {
         }
     }
 
+    /// 更換配對碼：只影響尚未配對的新 iPad，已配對的 iPad 用自己的金鑰，不受影響
+    func updatePairingCode(_ code: String) {
+        queue.async {
+            self.config?.code = code
+            self.startListener()
+        }
+    }
+
+    /// 移除一台 iPad：刪除金鑰、中斷它的連線，之後它無法再完成加密交握
+    func removeDevice(id: String) {
+        queue.async {
+            self.devices.remove(id: id)
+            if self.session?.deviceID == id { self.session?.cancel() }
+            self.pendingSessions.filter { $0.deviceID == id }.forEach { $0.cancel() }
+            self.startListener()
+        }
+    }
+
     private func startListener() {
         restartWork?.cancel()
-        listener?.cancel()
-        listener = nil
+        // 先等舊的監聽完全關閉、釋放連接埠，再用新的金鑰重新監聽（否則會 bind 失敗、要等 3 秒重試）。
+        // 已建立的連線不受影響。
+        if stoppingListener != nil {
+            startAfterStop = true
+            return
+        }
+        if let old = listener {
+            listener = nil
+            stoppingListener = old
+            startAfterStop = true
+            old.newConnectionHandler = { $0.cancel() }
+            old.stateUpdateHandler = { [weak self, weak old] state in
+                guard let self else { return }
+                switch state {
+                case .cancelled, .failed:
+                    guard self.stoppingListener === old else { return }
+                    self.stoppingListener = nil
+                    if self.startAfterStop {
+                        self.startAfterStop = false
+                        self.startListener()
+                    }
+                default:
+                    break
+                }
+            }
+            old.cancel()
+            return
+        }
         guard let config else { return }
 
-        let params = SecureTransport.parameters(pairingCode: config.code)
+        // 配對碼（新配對用）+ 每台已配對 iPad 的專屬金鑰；重新監聽不會中斷已建立的連線
+        let credentials = [PSKCredential.pairing(config.code)] + devices.all.map(\.credential)
+        let params = SecureTransport.parameters(credentials: credentials)
         params.allowLocalEndpointReuse = true
         guard let port = NWEndpoint.Port(rawValue: config.port),
               let listener = try? NWListener(using: params, on: port) else {
@@ -84,9 +144,10 @@ final class RemoteServer {
     }
 
     private func accept(_ connection: NWConnection) {
-        let session = ClientSession(connection: connection, queue: queue, power: power,
+        let session = ClientSession(connection: connection, queue: queue, power: power, devices: devices,
                                     hostInfoProvider: { [weak self] in self?.hostInfoProvider?() })
         session.streamingEnabled = streamingEnabled
+        configureInjector?(session.injector)
         session.onEnd = { [weak self] ended in
             guard let self else { return }
             self.pendingSessions.removeAll { $0 === ended }
@@ -104,6 +165,17 @@ final class RemoteServer {
             if let old, old !== session { old.cancel() }
             DispatchQueue.main.async { self.onClientChanged?(name) }
         }
+        session.onPaired = { [weak self] device in
+            guard let self else { return }
+            // 配對碼只能用一次：配對成功立刻換新碼，並把新 iPad 的金鑰加入監聽
+            let newCode = PairingCode.generate()
+            self.config?.code = newCode
+            self.startListener()
+            DispatchQueue.main.async {
+                self.onPairingCodeChanged?(newCode)
+                self.onPaired?(device)
+            }
+        }
         pendingSessions.append(session)
         session.start()
     }
@@ -117,13 +189,23 @@ final class RemoteServer {
 final class ClientSession {
     var onEnd: ((ClientSession) -> Void)?
     var onHello: ((String) -> Void)?
+    var onPaired: ((PairedDevice) -> Void)?
+    /// 已驗證的 iPad（identify 證明通過，或剛完成新配對）
+    private(set) var deviceID: String?
+
+    /// 單次文字上限：太長的資料不處理，避免長時間佔住佇列
+    static let maxTextLength = 200_000
+    /// 超過這個長度改用貼上（逐字輸入每 16 字元要 2ms）
+    static let maxTypedLength = 2_000
 
     private let connection: NWConnection
     private let channel: MessageChannel
     private let queue: DispatchQueue
     private let power: PowerManager
+    private let devices: PairedDeviceStore
     private let hostInfoProvider: () -> HostInfo?
-    private let injector = InputInjector()
+    private var helloReceived = false
+    let injector = InputInjector()
     private let streamer = ScreenStreamer()
     private let decoder = JSONDecoder()
 
@@ -140,12 +222,13 @@ final class ClientSession {
     private var framesInFlight = 0
     private var flowControl = false
 
-    init(connection: NWConnection, queue: DispatchQueue, power: PowerManager,
+    init(connection: NWConnection, queue: DispatchQueue, power: PowerManager, devices: PairedDeviceStore,
          hostInfoProvider: @escaping () -> HostInfo?) {
         self.connection = connection
         self.channel = MessageChannel(connection: connection)
         self.queue = queue
         self.power = power
+        self.devices = devices
         self.hostInfoProvider = hostInfoProvider
     }
 
@@ -206,8 +289,33 @@ final class ClientSession {
     // MARK: 訊息處理
 
     private func handle(_ message: ClientMessage) {
+        // 完成 hello（確認身分）之前，不接受任何滑鼠、鍵盤或串流指令
+        if !helloReceived {
+            switch message {
+            case .identify, .hello, .ping, .goodbye: break
+            default: return
+            }
+        }
         switch message {
+        case let .identify(id, proof):
+            guard !helloReceived, deviceID == nil,
+                  let key = devices.key(for: id),
+                  let expected = SecureTransport.deviceProof(key: key, connection: connection),
+                  SecureTransport.constantTimeEqual(expected, proof) else { return }
+            deviceID = id
+
         case let .hello(clientName, version, quality, displayID):
+            let firstHello = !helloReceived
+            helloReceived = true
+            if let id = deviceID {
+                devices.touch(id: id, name: clientName)
+            } else if firstHello {
+                // 沒有裝置證明 → 這是用配對碼進行的新配對：發給它專屬金鑰
+                let device = devices.add(name: clientName)
+                deviceID = device.id
+                channel.send(ServerMessage.paired(deviceID: device.id, key: device.key))
+                onPaired?(device)
+            }
             flowLock.withLock {
                 flowControl = version >= 2
                 framesInFlight = 0
@@ -245,7 +353,12 @@ final class ClientSession {
         case let .keyPress(keyCode, modifiers):
             injector.keyPress(keyCode, modifiers: modifiers)
         case let .text(text, usePaste):
-            if usePaste {
+            let length = text.utf16.count
+            guard length <= Self.maxTextLength else {
+                channel.send(ServerMessage.notice("文字太長（超過 \(Self.maxTextLength) 字元），未送出。"))
+                return
+            }
+            if usePaste || length > Self.maxTypedLength {
                 DispatchQueue.main.async { self.injector.paste(text) }
             } else {
                 injector.type(text)
@@ -265,7 +378,7 @@ final class ClientSession {
         case .requestKeyframe:
             streamer.requestKeyframe()
         case let .videoAck(count):
-            flowLock.withLock { framesInFlight = max(0, framesInFlight - count) }
+            flowLock.withLock { framesInFlight -= min(max(count, 0), framesInFlight) }
             streamer.sendSkippedFrameIfNeeded()
         case let .setAudio(enabled):
             streamer.audioEnabled = enabled

@@ -19,11 +19,14 @@ struct AgentMenuView: View {
     @EnvironmentObject private var agent: AgentController
     @State private var copied = false
     @State private var confirmRegenerate = false
+    @State private var showCode = false
+    @State private var removing: PairedDevice?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             header
             pairingCard
+            devicesCard
             permissionsCard
             networkCard
             standbyCard
@@ -58,17 +61,27 @@ struct AgentMenuView: View {
                 }
             }
             Spacer()
+            if agent.connectedClient != nil {
+                Button("中斷連線", role: .destructive) { agent.disconnectClient() }
+                    .controlSize(.small)
+            }
         }
     }
 
     private var pairingCard: some View {
         Card(title: "配對碼", systemImage: "key.fill") {
-            Text(agent.pairingCode)
+            // 預設隱藏：避免在螢幕分享、遠端畫面或旁人視線中外洩
+            Text(showCode ? agent.pairingCode : "•••••-•••••-•••••-•••••")
                 .font(.system(size: 17, weight: .semibold, design: .monospaced))
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.vertical, 6)
             HStack {
+                Button {
+                    showCode.toggle()
+                } label: {
+                    Label(showCode ? "隱藏" : "顯示", systemImage: showCode ? "eye.slash" : "eye")
+                }
                 Button {
                     agent.copyPairingCode()
                     copied = true
@@ -80,14 +93,45 @@ struct AgentMenuView: View {
                 Button("重新產生…") { confirmRegenerate = true }
             }
             .controlSize(.small)
-            Text("在 iPad 上輸入此配對碼。連線全程以 TLS（AES‑256‑GCM）加密。")
+            Text("在 iPad 上輸入此配對碼。配對碼只能使用一次，配對成功後自動更換；拷貝後 60 秒自動從剪貼簿清除。連線全程加密並具前向保密。")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
         .confirmationDialog("重新產生配對碼？", isPresented: $confirmRegenerate) {
             Button("重新產生", role: .destructive) { agent.regeneratePairingCode() }
         } message: {
-            Text("已配對的 iPad 會立即中斷，需要輸入新的配對碼。")
+            Text("目前的配對碼會立即失效。已配對的 iPad 不受影響。")
+        }
+    }
+
+    private var devicesCard: some View {
+        Card(title: "已配對的 iPad", systemImage: "ipad.landscape") {
+            if agent.pairedDevices.isEmpty {
+                Text("尚未配對任何 iPad。").font(.callout).foregroundStyle(.secondary)
+            } else {
+                ForEach(agent.pairedDevices) { device in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(device.name).font(.callout)
+                            Text("最後連線：" + (device.lastSeen ?? device.pairedAt)
+                                    .formatted(date: .abbreviated, time: .shortened))
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button("移除", role: .destructive) { removing = device }
+                            .controlSize(.small)
+                    }
+                }
+            }
+        }
+        .confirmationDialog("移除「\(removing?.name ?? "")」？", isPresented: Binding(
+            get: { removing != nil }, set: { if !$0 { removing = nil } })) {
+            Button("移除", role: .destructive) {
+                if let removing { agent.removeDevice(removing) }
+                removing = nil
+            }
+        } message: {
+            Text("這台 iPad 會立即中斷，之後必須用新的配對碼重新配對。其他 iPad 不受影響。")
         }
     }
 

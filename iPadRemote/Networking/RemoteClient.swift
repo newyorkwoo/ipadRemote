@@ -130,8 +130,12 @@ final class RemoteClient: ObservableObject {
         openConnection()
     }
 
+    /// App 上鎖時為 true：滑鼠、鍵盤、文字輸入一律不送出
+    var inputBlocked = false
+
     func send(_ message: ClientMessage) {
         guard state == .connected else { return }
+        if inputBlocked && message.isUserInput { return }
         channel?.send(message)
     }
 
@@ -192,9 +196,15 @@ final class RemoteClient: ObservableObject {
         generation += 1
         let gen = generation
 
-        let code = device.pairingCode
-        guard PairingCode.isValid(code) else {
-            state = .failed("配對碼無效，請編輯這台 Mac 重新輸入。")
+        // 已配對 → 用專屬裝置金鑰；尚未配對 → 用一次性配對碼
+        let credential = device.credential
+        let psk: PSKCredential
+        if let credential {
+            psk = .device(id: credential.deviceID, key: credential.key)
+        } else if PairingCode.isValid(device.pairingCode) {
+            psk = .pairing(device.pairingCode)
+        } else {
+            state = .failed("這台 Mac 尚未配對，請編輯這台 Mac 並輸入 Mac 選單列上的配對碼。")
             return
         }
 
@@ -211,7 +221,7 @@ final class RemoteClient: ObservableObject {
         var sawTLSError = false
         var lastError: NWError?
         for endpoint in endpoints {
-            let candidate = NWConnection(to: endpoint, using: SecureTransport.parameters(pairingCode: code))
+            let candidate = NWConnection(to: endpoint, using: SecureTransport.parameters(credentials: [psk]))
             racing.append(candidate)
             candidate.stateUpdateHandler = { [weak self, weak candidate] newState in
               DispatchQueue.main.async {
@@ -239,7 +249,9 @@ final class RemoteClient: ObservableObject {
                     if sawTLSError {
                         self.tlsFailures += 1
                         if self.tlsFailures >= 3 {
-                            self.fail("加密交握失敗：配對碼不正確，或 Mac 已重新產生配對碼。")
+                            self.fail(credential == nil
+                                      ? "加密交握失敗：配對碼不正確或已失效（配對碼只能使用一次）。請在 Mac 選單列取得目前的配對碼。"
+                                      : "加密交握失敗：這台 iPad 的配對可能已在 Mac 上被移除。請在 Mac 選單列取得新的配對碼，編輯這台 Mac 重新配對。")
                             return
                         }
                     }
@@ -295,6 +307,11 @@ final class RemoteClient: ObservableObject {
         lastReceived = Date()
         channel.startReceiving()
         renderer.prepareForNewStream()
+        // 已配對：先證明自己是哪一台（綁定這條連線，無法重送）；沒送的話 Mac 會當成新配對
+        if let credential = device.credential,
+           let proof = SecureTransport.deviceProof(key: credential.key, connection: connection) {
+            channel.send(ClientMessage.identify(deviceID: credential.deviceID, proof: proof))
+        }
         channel.send(ClientMessage.hello(clientName: UIDevice.current.name,
                                          protocolVersion: RemoteConstants.protocolVersion,
                                          quality: quality,
@@ -360,6 +377,8 @@ final class RemoteClient: ObservableObject {
             permissions = Permissions(screenRecording: screen, accessibility: accessibility)
         case .notice(let text):
             notice = text
+        case let .paired(deviceID, key):
+            SavedMac.storePairing(DeviceCredential(deviceID: deviceID, key: key), for: device.id)
         }
     }
 
@@ -421,6 +440,19 @@ final class RemoteClient: ObservableObject {
             return "加密交握失敗"
         default:
             return error.localizedDescription
+        }
+    }
+}
+
+extension ClientMessage {
+    /// 會操作到 Mac 的訊息（App 上鎖時要擋下）
+    var isUserInput: Bool {
+        switch self {
+        case .mouseMove, .mouseMoveRelative, .mouseButton, .click, .scroll,
+             .key, .keyPress, .text, .selectInputSource, .nextInputSource:
+            return true
+        default:
+            return false
         }
     }
 }

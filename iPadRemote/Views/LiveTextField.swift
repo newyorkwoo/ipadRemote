@@ -24,7 +24,11 @@ struct LiveTextField: UIViewRepresentable {
         field.font = .preferredFont(forTextStyle: .body)
         field.borderStyle = .none
         field.returnKeyType = .send
+        // 這裡常會輸入 Mac 的密碼：關閉拼字檢查與預測，鍵盤不會學習或建議打過的字
         field.autocorrectionType = .no
+        field.spellCheckingType = .no
+        field.inlinePredictionType = .no
+        field.smartInsertDeleteType = .no
         field.autocapitalizationType = .none
         field.smartQuotesType = .no
         field.smartDashesType = .no

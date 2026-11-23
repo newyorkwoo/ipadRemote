@@ -147,6 +147,7 @@ final class RemoteServer {
         let session = ClientSession(connection: connection, queue: queue, power: power, devices: devices,
                                     hostInfoProvider: { [weak self] in self?.hostInfoProvider?() })
         session.streamingEnabled = streamingEnabled
+        session.displayScalingEnabled = streamingEnabled
         configureInjector?(session.injector)
         session.onEnd = { [weak self] ended in
             guard let self else { return }
@@ -212,6 +213,11 @@ final class ClientSession {
     var streamingEnabled = true
     private var quality: StreamQuality = .balanced
     private var displayID: CGDirectDisplayID?
+    /// iPad 要求的介面大小，以及目前被調整解析度的螢幕（斷線時還原）
+    private var interfaceScale: InterfaceScale = .native
+    private var scaledDisplay: CGDirectDisplayID?
+    /// 測試時不要真的改螢幕解析度
+    var displayScalingEnabled = true
     private var ended = false
     private var streamGeneration = 0
     private var inputSourceObserver: NSObjectProtocol?
@@ -278,6 +284,10 @@ final class ClientSession {
         ended = true
         injector.releaseAll()
         power.preventIdleSleep(false)
+        if let display = scaledDisplay {
+            scaledDisplay = nil
+            DisplayScaler.shared.release(display, owner: self)
+        }
         let streamer = self.streamer
         Task { await streamer.stop() }
         if let observer = inputSourceObserver {
@@ -371,6 +381,12 @@ final class ClientSession {
 
         case let .selectDisplay(id):
             displayID = id
+            applyInterfaceScale()
+            restartStream()
+        case let .setInterfaceScale(scale):
+            guard scale != interfaceScale || scale != .native else { return }
+            interfaceScale = scale
+            applyInterfaceScale(report: true)
             restartStream()
         case let .setQuality(quality):
             self.quality = quality
@@ -387,6 +403,40 @@ final class ClientSession {
         case .goodbye:
             cancel()
         }
+    }
+
+    /// 把介面大小套用到目前串流的螢幕；換螢幕時先還原前一個
+    private func applyInterfaceScale(report: Bool = false) {
+        guard displayScalingEnabled, !ended else { return }
+        let target = displayID.flatMap { id in Self.onlineDisplays().contains(id) ? id : nil } ?? CGMainDisplayID()
+        if let previous = scaledDisplay, previous != target {
+            DisplayScaler.shared.release(previous, owner: self, after: 0)
+            scaledDisplay = nil
+        }
+        guard interfaceScale != .native || scaledDisplay != nil else { return }
+        let outcome = DisplayScaler.shared.apply(interfaceScale, to: target, owner: self)
+        scaledDisplay = outcome.kind == .applied ? target : nil
+        guard report else { return }
+        let message: String
+        switch outcome.kind {
+        case .applied:
+            message = "Mac 螢幕暫時調整為 \(outcome.width)×\(outcome.height)，中斷連線後會還原。"
+        case .restored:
+            message = "Mac 螢幕已還原為原本的解析度。"
+        case .alreadyNative:
+            message = "這個螢幕的介面已經夠大（\(outcome.width)×\(outcome.height)），不需要調整。"
+        case .unavailable:
+            message = "這個螢幕沒有適合的較低解析度可以切換。"
+        }
+        channel.send(ServerMessage.notice(message))
+    }
+
+    private static func onlineDisplays() -> [CGDirectDisplayID] {
+        var count: UInt32 = 0
+        guard CGGetOnlineDisplayList(0, nil, &count) == .success, count > 0 else { return [] }
+        var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
+        guard CGGetOnlineDisplayList(count, &ids, &count) == .success else { return [] }
+        return Array(ids.prefix(Int(count)))
     }
 
     private func observeInputSources() {

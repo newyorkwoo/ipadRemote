@@ -55,6 +55,7 @@ final class MessageCodingTests: XCTestCase {
             .selectInputSource(id: "com.apple.inputmethod.TCIM.Zhuyin"), .nextInputSource,
             .selectDisplay(id: 2), .setQuality(.balanced), .requestKeyframe, .wakeDisplay, .goodbye,
             .setAudio(enabled: true), .setAudio(enabled: false), .videoAck(count: 1),
+            .setInterfaceScale(.native), .setInterfaceScale(.larger),
         ]
         for message in messages {
             XCTAssertTrue(try roundTrip(message), "\(message)")

@@ -190,6 +190,8 @@ final class FakeMac {
             notice("☀️ 螢幕已喚醒")
         case .videoAck:
             break
+        case .setInterfaceScale(let scale):
+            notice("🔍 介面大小：\(scale.title)")
         case .setAudio(let enabled):
             log(enabled ? "🔊 iPad 開啟聲音" : "🔇 iPad 關閉聲音")
         case .goodbye:

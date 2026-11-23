@@ -268,6 +268,15 @@ struct RemoteSessionView: View {
                     Text(quality.title).tag(quality)
                 }
             }
+            Picker(selection: $client.interfaceScale) {
+                ForEach(InterfaceScale.allCases) { scale in
+                    Text(scale.title).tag(scale)
+                }
+            } label: {
+                Label("Mac 介面大小", systemImage: "textformat.size")
+                Text("連線期間暫時調低 Mac 螢幕解析度，斷線後還原")
+            }
+            .pickerStyle(.menu)
             Section {
                 Button("喚醒 Mac（Wake‑on‑LAN）", systemImage: "power") { client.wakeMac() }
             }

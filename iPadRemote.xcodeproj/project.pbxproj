@@ -39,6 +39,7 @@
 		77AE38327B0E251F3F4AADEC /* RemoteCanvasView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A815A3872208F37D4B770A27 /* RemoteCanvasView.swift */; };
 		7EFC5C0F1E183ECF825D1BF0 /* Framing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 287288382D265C12B460059F /* Framing.swift */; };
 		800F9AC708C7C74B39A31C51 /* LiveTextField.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0AB10534379AD1CC0625C29 /* LiveTextField.swift */; };
+		84A43A71FC44E9CFB9C54240 /* DisplayScaler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2E4E6EEC1B7B2C510D55997 /* DisplayScaler.swift */; };
 		8626EC4F68D42E01DECA8DE5 /* SecureTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54AB2732E21DF3ECC5A4B965 /* SecureTransport.swift */; };
 		89FA5F5332D10C64387EEAC8 /* VideoPacket.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4BF64E2D60B9F34F6D1F306 /* VideoPacket.swift */; };
 		8ADE1B56E640546BAAA89B86 /* RemoteFlowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45BBA8EB575CC0A88FE670E2 /* RemoteFlowUITests.swift */; };
@@ -61,7 +62,9 @@
 		B918F9D9EC37DC1F9F2B339B /* WakeOnLAN.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FE34D03FC7C18A6D7E0F87B /* WakeOnLAN.swift */; };
 		BEE1EE0BB1355E31C88212BB /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = A58108BCEAC602FE2F326BEF /* Keychain.swift */; };
 		C0E66804EC2AE6B2C2387784 /* Locked.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB533AACBA66498B47A3CB15 /* Locked.swift */; };
+		C4523B8564333E91E76A0F40 /* DisplayScalerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 234A2E57FB9A20344AFB5215 /* DisplayScalerTests.swift */; };
 		C57100201763F6FEB14A9390 /* AudioCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03A50E0F3A723D11F567B50A /* AudioCodec.swift */; };
+		C5BEE4DFD569DB6AEA9DA9E6 /* DisplayScaler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2E4E6EEC1B7B2C510D55997 /* DisplayScaler.swift */; };
 		CBC53D673518CAC10D6B97DC /* MacSystemTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8042F236626D619C1CCA1029 /* MacSystemTests.swift */; };
 		CCE47CF9E27BA04AC4EE08F1 /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = A58108BCEAC602FE2F326BEF /* Keychain.swift */; };
 		D84B0FA0F07B324FF750C360 /* Protocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0228484B08C0D516E21B494 /* Protocol.swift */; };
@@ -100,6 +103,7 @@
 		16533C7B311445516CA3A7C5 /* MessageChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageChannel.swift; sourceTree = "<group>"; };
 		1EBFB7DC55206ABBF3DC3867 /* KeyMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyMap.swift; sourceTree = "<group>"; };
 		23255C3237EB101E9B93DE2A /* MacCoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MacCoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		234A2E57FB9A20344AFB5215 /* DisplayScalerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayScalerTests.swift; sourceTree = "<group>"; };
 		246CD4F1BE4F4481D02EFB7F /* RemoteSessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteSessionView.swift; sourceTree = "<group>"; };
 		24DB1214AB3EA97ED52A8893 /* RemoteClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteClient.swift; sourceTree = "<group>"; };
 		25A2217DEA9337AFEF73BE04 /* TestHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestHelpers.swift; sourceTree = "<group>"; };
@@ -131,6 +135,7 @@
 		A815A3872208F37D4B770A27 /* RemoteCanvasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteCanvasView.swift; sourceTree = "<group>"; };
 		A84D1A3E31E27254305B8553 /* InputInjector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputInjector.swift; sourceTree = "<group>"; };
 		B1B431AD9787E1269E9408C5 /* SecureChannelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureChannelTests.swift; sourceTree = "<group>"; };
+		B2E4E6EEC1B7B2C510D55997 /* DisplayScaler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayScaler.swift; sourceTree = "<group>"; };
 		B43EF7DE63EEA5C1EAD69F85 /* VideoRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoRenderer.swift; sourceTree = "<group>"; };
 		B48A54EFE913430F26D4EB6D /* iPadRemoteUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = iPadRemoteUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B4B62F1C37028E287C11AC9E /* AppLock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLock.swift; sourceTree = "<group>"; };
@@ -153,6 +158,7 @@
 			isa = PBXGroup;
 			children = (
 				EAF75F6A5DACC42C00F2AD0D /* AudioTests.swift */,
+				234A2E57FB9A20344AFB5215 /* DisplayScalerTests.swift */,
 				8042F236626D619C1CCA1029 /* MacSystemTests.swift */,
 				F3B9F5A2A93502D8D3E5787A /* ProtocolTests.swift */,
 				B1B431AD9787E1269E9408C5 /* SecureChannelTests.swift */,
@@ -304,6 +310,7 @@
 			children = (
 				8753CCF1B7FAF0BD3E0DE88F /* AgentController.swift */,
 				9F149A69F9E768E23439FC70 /* Assets.xcassets */,
+				B2E4E6EEC1B7B2C510D55997 /* DisplayScaler.swift */,
 				2BC04C77670BAE56EFFF4312 /* H264Encoder.swift */,
 				6F2ACE6C64FE3233724F6780 /* Info.plist */,
 				A84D1A3E31E27254305B8553 /* InputInjector.swift */,
@@ -510,6 +517,8 @@
 			files = (
 				6EC117A58F4E81205253F87A /* AudioCodec.swift in Sources */,
 				D9AF8B2D64AA6B5F82702A81 /* AudioTests.swift in Sources */,
+				84A43A71FC44E9CFB9C54240 /* DisplayScaler.swift in Sources */,
+				C4523B8564333E91E76A0F40 /* DisplayScalerTests.swift in Sources */,
 				AD3B750FFBD1CD508F74A225 /* Framing.swift in Sources */,
 				A7F3B9DE98B7482A36C80BE6 /* H264Encoder.swift in Sources */,
 				E75E249A2F60559929BBAB91 /* InputInjector.swift in Sources */,
@@ -538,6 +547,7 @@
 			files = (
 				29AAF0BFF9ACE53D2381FA50 /* AgentController.swift in Sources */,
 				C57100201763F6FEB14A9390 /* AudioCodec.swift in Sources */,
+				C5BEE4DFD569DB6AEA9DA9E6 /* DisplayScaler.swift in Sources */,
 				6BC8DCAF5EF672ACF05138DA /* Framing.swift in Sources */,
 				FAE4B9AF5A095F39C9D0B693 /* H264Encoder.swift in Sources */,
 				2137FD01794BEC438559273D /* InputInjector.swift in Sources */,

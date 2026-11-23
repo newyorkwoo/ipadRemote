@@ -100,6 +100,30 @@ enum StreamQuality: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+/// 串流期間把 Mac 螢幕暫時切到較低的「看起來像」解析度，讓文字與介面在 iPad 上變大（斷線後還原）
+enum InterfaceScale: String, Codable, CaseIterable, Identifiable {
+    case native, large, larger, largest
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .native: return "原始大小"
+        case .large: return "大"
+        case .larger: return "較大"
+        case .largest: return "最大"
+        }
+    }
+    /// 目標的「看起來像」寬度（點）；iPad 13 吋橫放約 1376 點寬
+    var targetWidth: Int? {
+        switch self {
+        case .native: return nil
+        case .large: return 1920
+        case .larger: return 1600
+        case .largest: return 1280
+        }
+    }
+}
+
 // MARK: - 訊息
 
 /// iPad → Mac
@@ -127,6 +151,8 @@ enum ClientMessage: Codable {
     case videoAck(count: Int)
     /// 開關 Mac 聲音轉送到 iPad
     case setAudio(enabled: Bool)
+    /// 調整 Mac 螢幕解析度讓介面變大（舊版 Mac 端會忽略）
+    case setInterfaceScale(InterfaceScale)
     case wakeDisplay
     case goodbye
 }

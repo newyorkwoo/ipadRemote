@@ -32,6 +32,17 @@ final class RemoteClient: ObservableObject {
         didSet { if quality != oldValue { send(.setQuality(quality)) } }
     }
 
+    /// Mac 介面大小：串流期間暫時降低 Mac 螢幕的「看起來像」解析度（每台 Mac 各自記住）
+    @Published var interfaceScale: InterfaceScale {
+        didSet {
+            guard interfaceScale != oldValue else { return }
+            UserDefaults.standard.set(interfaceScale.rawValue, forKey: Self.interfaceScaleKey(device.id))
+            send(.setInterfaceScale(interfaceScale))
+        }
+    }
+
+    static func interfaceScaleKey(_ id: UUID) -> String { "interfaceScale.\(id.uuidString)" }
+
     /// Mac 聲音轉送到 iPad（記住使用者的選擇）
     @Published var audioEnabled: Bool = UserDefaults.standard.object(forKey: "audioEnabled") as? Bool ?? true {
         didSet {
@@ -81,6 +92,8 @@ final class RemoteClient: ObservableObject {
         self.device = device
         self.browser = browser
         self.quality = device.quality
+        self.interfaceScale = UserDefaults.standard.string(forKey: Self.interfaceScaleKey(device.id))
+            .flatMap(InterfaceScale.init(rawValue:)) ?? .native
         renderer.onSizeChange = { [weak self] size in DispatchQueue.main.async { self?.videoSize = size } }
         renderer.onNeedKeyframe = { [weak self] in DispatchQueue.main.async { self?.requestKeyframeThrottled() } }
         let audioOn = audioEnabled
@@ -317,6 +330,9 @@ final class RemoteClient: ObservableObject {
                                          quality: quality,
                                          displayID: currentDisplayID))
         channel.send(ClientMessage.setAudio(enabled: audioEnabled))
+        if interfaceScale != .native {
+            channel.send(ClientMessage.setInterfaceScale(interfaceScale))
+        }
         audio.reset()
     }
 

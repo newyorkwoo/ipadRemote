@@ -140,6 +140,26 @@ final class InputInjectorTests: XCTestCase {
         XCTAssertEqual(events[0].location, cursor)
     }
 
+    /// 系統回報的游標位置會落後：移動後立刻點擊，要點在剛移過去的位置，而不是系統回報的舊位置
+    func testClickRightAfterMoveUsesNewPositionNotStaleCursor() {
+        var clock: TimeInterval = 100
+        injector.now = { clock }
+        injector.moveAbsolute(x: 0.5, y: 0.5)
+        let target = events[0].location
+        XCTAssertNotEqual(target, cursor)
+        injector.click(.left, clickCount: 1, modifiers: [])
+        XCTAssertEqual(events[1].location, target, "按下要在新位置")
+        XCTAssertEqual(events[2].location, target, "放開要在新位置")
+        XCTAssertEqual(activations, [target], "帶到前面的是新位置上的視窗")
+        // 相對移動也從新位置出發
+        injector.moveRelative(dx: 0, dy: 0)
+        XCTAssertEqual(events.last?.location, target)
+        // 過一段時間沒有遠端操作：改回系統位置（Mac 上的人可能動過實體滑鼠）
+        clock += 5
+        injector.click(.left, clickCount: 1, modifiers: [])
+        XCTAssertEqual(events.last?.location, cursor)
+    }
+
     func testRightClick() {
         injector.click(.right, clickCount: 1, modifiers: [])
         XCTAssertEqual(events.map(\.type), [.rightMouseDown, .rightMouseUp])
@@ -156,6 +176,20 @@ final class InputInjectorTests: XCTestCase {
         injector.button(.left, down: false, clickCount: 1, modifiers: [])
         injector.click(.right, clickCount: 1, modifiers: [])
         XCTAssertEqual(activations.count, 1)
+    }
+
+    /// 「截圖」App 等放的全螢幕透明層要略過；選單、一般視窗不受影響
+    func testFullScreenOverlayDetection() {
+        let display = CGRect(x: 0, y: 0, width: 1512, height: 982)
+        let second = CGRect(x: 1512, y: 0, width: 2560, height: 1440)
+        XCTAssertTrue(WindowActivator.isFullScreenOverlay(layer: 24, bounds: display, displays: [display, second]))
+        XCTAssertTrue(WindowActivator.isFullScreenOverlay(layer: 24, bounds: second, displays: [display, second]))
+        XCTAssertFalse(WindowActivator.isFullScreenOverlay(layer: 0, bounds: display, displays: [display]),
+                       "全螢幕的一般視窗是使用者的視窗")
+        XCTAssertFalse(WindowActivator.isFullScreenOverlay(layer: 101, bounds: CGRect(x: 100, y: 30, width: 240, height: 400),
+                                                           displays: [display]), "選單")
+        XCTAssertFalse(WindowActivator.isFullScreenOverlay(layer: 24, bounds: CGRect(x: 0, y: 0, width: 1512, height: 33),
+                                                           displays: [display]), "選單列")
     }
 
     func testWindowActivatorIgnoresPointsWithoutWindows() {

@@ -27,6 +27,13 @@ final class AgentController: ObservableObject {
     }
     var tailscaleIP: String? { addresses.first(where: NetworkAddress.isTailscale) }
 
+    /// 內嵌 Tailscale：不必另外安裝 Tailscale App，登入一次就能從任何網路連入
+    let tailnet: TailnetController
+    private let tailnetGateway: TailnetGateway
+    /// 內嵌節點的 tailnet 位址（hostInfoProvider 在伺服器佇列上讀取）
+    private let tailnetIP = Locked<String?>(nil)
+    private var tailnetCancellable: AnyCancellable?
+
     let port: UInt16
     let hostID: String
     private let devices = PairedDeviceStore(keychainAccount: "mac-paired-devices")
@@ -55,6 +62,11 @@ final class AgentController: ObservableObject {
             Keychain.set(code, for: Self.codeAccount)
             pairingCode = code
         }
+        let id = hostID
+        tailnet = TailnetController(hostName: {
+            TailnetNaming.macHostName(computerName: SystemInfo.computerName, hostID: id)
+        })
+        tailnetGateway = TailnetGateway(port: port)
         launchAtLogin = SMAppService.mainApp.status == .enabled
         standbyMode = defaults.object(forKey: "standbyMode") as? Bool ?? true
         power.setStandby(standbyMode)
@@ -84,6 +96,7 @@ final class AgentController: ObservableObject {
 
         refresh()
         startServer()
+        startTailnet()
 
         // 睡眠喚醒、網路改變後重新監聽
         let center = NSWorkspace.shared.notificationCenter
@@ -110,6 +123,23 @@ final class AgentController: ObservableObject {
         onACPower = power.isOnACPower
         pairedDevices = devices.all
         syncLaunchAtLogin()
+    }
+
+    private func startTailnet() {
+        let gateway = tailnetGateway
+        tailnet.onRunning = { [weak self] node in
+            do {
+                try gateway.start(on: node)
+            } catch {
+                NSLog("tailnet 監聽失敗：\(error)")
+            }
+            self?.objectWillChange.send()
+        }
+        tailnet.onStopped = { gateway.stop() }
+        tailnetCancellable = tailnet.$selfIPv4.sink { [weak self] ip in
+            self?.tailnetIP.withLock { $0 = ip }
+        }
+        tailnet.resume()
     }
 
     private func startServer() {
@@ -212,9 +242,16 @@ final class AgentController: ObservableObject {
                         otherMACAddresses: Array((net?.allMACs ?? []).dropFirst()),
                         ipv4: net?.ipv4,
                         broadcast: net?.broadcast,
-                        addresses: SystemInfo.reachableIPv4Addresses(),
+                        addresses: reachableAddresses(),
                         displays: SystemInfo.displays(),
                         inputSources: InputSourceManager.list())
+    }
+
+    /// 區網、系統 Tailscale，再加上內嵌 Tailscale 節點的位址（iPad 換到任何網路時都會嘗試）
+    private func reachableAddresses() -> [String] {
+        var list = SystemInfo.reachableIPv4Addresses()
+        if let ip = tailnetIP.withLock({ $0 }), !list.contains(ip) { list.append(ip) }
+        return list
     }
 
     private static let emptyHostInfo = HostInfo(hostID: "", computerName: "Mac", model: "", isLaptop: false,

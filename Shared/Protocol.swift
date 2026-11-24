@@ -26,12 +26,118 @@ enum NetworkAddress {
     }
 }
 
+// MARK: - 內嵌 Tailscale 的節點命名
+
+/// 兩個 App 內嵌的 Tailscale 節點在 tailnet 上的主機名稱。
+/// Mac：ipadremote-mac-<hostID 前 8 碼>-<電腦名稱>，iPad 用前綴辨認 tailnet 上哪些是自己的 Mac。
+enum TailnetNaming {
+    static let macPrefix = "ipadremote-mac-"
+    static let iPadPrefix = "ipadremote-ipad-"
+
+    static func macHostName(computerName: String, hostID: String) -> String {
+        let name = sanitize(computerName)
+        return macPrefix + idTag(hostID) + (name.isEmpty ? "" : "-" + name)
+    }
+
+    static func iPadHostName(deviceName: String) -> String {
+        let name = sanitize(deviceName)
+        return iPadPrefix + (name.isEmpty ? "ipad" : name)
+    }
+
+    /// hostID（UUID）前 8 碼，小寫
+    static func idTag(_ hostID: String) -> String {
+        String(hostID.lowercased().filter(\.isHexDigit).prefix(8))
+    }
+
+    /// 解析 Mac 節點名稱 → (hostID 前 8 碼, 顯示名稱)；不是本 App 的 Mac 節點時回傳 nil
+    static func parseMac(_ hostName: String) -> (idTag: String, displayName: String)? {
+        let lower = hostName.lowercased()
+        guard lower.hasPrefix(macPrefix) else { return nil }
+        let rest = lower.dropFirst(macPrefix.count)
+        let tag = String(rest.prefix(8))
+        guard tag.count == 8, tag.allSatisfy(\.isHexDigit) else { return nil }
+        let name = rest.dropFirst(8).drop(while: { $0 == "-" })
+            .split(separator: "-").joined(separator: " ")
+        return (tag, name.isEmpty ? "Mac" : name)
+    }
+
+    static func matches(hostID: String?, idTag tag: String) -> Bool {
+        guard let hostID, !tag.isEmpty else { return false }
+        return idTag(hostID) == tag
+    }
+
+    /// DNS 標籤只能用英數與連字號：中文等字元會被略過；最長 39 字元，整個名稱才不超過 63 字元
+    static func sanitize(_ name: String) -> String {
+        var out = ""
+        var lastDash = true
+        for scalar in name.lowercased().unicodeScalars {
+            if scalar.isASCII, CharacterSet.alphanumerics.contains(scalar) {
+                out.unicodeScalars.append(scalar)
+                lastDash = false
+            } else if !lastDash {
+                out.append("-")
+                lastDash = true
+            }
+        }
+        while out.hasSuffix("-") { out.removeLast() }
+        return String(out.prefix(39)).trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+    }
+}
+
 // MARK: - 共用資料模型
 
 struct InputSourceInfo: Codable, Hashable, Identifiable {
     var id: String          // 例如 com.apple.inputmethod.TCIM.Zhuyin
     var name: String        // 例如「注音」
     var isSelected: Bool
+}
+
+extension InputSourceInfo {
+    /// 顯示用的中文名稱。Mac 回報的名稱依 Mac 端程式的語系而定，常是英文（例如「Zhuyin - Traditional」），
+    /// 常見的輸入法改用固定的中文名稱；不認得的維持 Mac 給的名稱
+    var displayName: String { Self.chineseName(forID: id) ?? name }
+
+    static func chineseName(forID id: String) -> String? {
+        let parts = id.split(separator: ".").map(String.init)
+        guard let last = parts.last else { return nil }
+        if id.hasPrefix("com.apple.inputmethod.TCIM.") {
+            switch last {
+            case "Zhuyin": return "注音"
+            case "ZhuyinEten": return "注音（倚天）"
+            case "Cangjie": return "倉頡"
+            case "Jianyi": return "速成"
+            case "Pinyin": return "拼音（繁體）"
+            case "Shuangpin": return "雙拼（繁體）"
+            case "WBH": return "筆畫（繁體）"
+            default: return nil
+            }
+        }
+        if id.hasPrefix("com.apple.inputmethod.SCIM.") {
+            switch last {
+            case "ITABC": return "拼音（簡體）"
+            case "Shuangpin": return "雙拼（簡體）"
+            case "WBX", "WBXFull": return "五筆"
+            case "WBH": return "筆畫（簡體）"
+            default: return nil
+            }
+        }
+        if id.hasPrefix("com.apple.inputmethod.TYIM.") { return "粵語" }
+        if id.hasPrefix("com.apple.inputmethod.Kotoeri.") {
+            if last.contains("Katakana") { return "片假名" }
+            if last.contains("Japanese") { return "日文" }
+            return nil
+        }
+        if id.hasPrefix("com.apple.inputmethod.Korean.") { return "韓文" }
+        if id.hasPrefix("com.apple.keylayout.") {
+            switch last {
+            case "ABC": return "ABC"
+            case "US": return "英文（美式）"
+            case "British": return "英文（英式）"
+            default: return nil
+            }
+        }
+        return nil
+    }
 }
 
 struct DisplayInfo: Codable, Hashable, Identifiable {

@@ -10,9 +10,13 @@ enum WindowActivator {
     static func bringWindowToFront(at point: CGPoint) {
         guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements],
                                                     kCGNullWindowID) as? [[String: Any]] else { return }
-        // 清單由前到後排列。Dock / Window Server 會放一層蓋住整個螢幕的透明視窗，要略過，
-        // 否則每次都會以為點到的是 Dock
-        let windows = list.compactMap(WindowInfo.init).filter { !systemOverlayOwners.contains($0.owner) }
+        // 清單由前到後排列。Dock、Window Server、「截圖」App 等會放一層蓋住整個螢幕的透明視窗，要略過，
+        // 否則每次都會以為點到的是那一層，被蓋住的視窗就不會被帶到前面
+        let displays = activeDisplayBounds()
+        let windows = list.compactMap(WindowInfo.init).filter {
+            !systemOverlayOwners.contains($0.owner)
+                && !isFullScreenOverlay(layer: $0.layer, bounds: $0.bounds, displays: displays)
+        }
         guard let target = windows.first(where: { $0.bounds.contains(point) && $0.alpha > 0 }) else { return }
         // 點到選單、浮動面板等非一般視窗：交給系統處理
         guard target.layer == 0, target.pid != ProcessInfo.processInfo.processIdentifier else { return }
@@ -33,6 +37,24 @@ enum WindowActivator {
     }
 
     private static let systemOverlayOwners: Set<String> = ["Dock", "Window Server"]
+
+    /// 不是一般視窗（layer ≠ 0）又幾乎蓋滿整個螢幕：系統或工具放的透明覆蓋層，不是使用者要點的東西。
+    /// 選單、彈出面板、提示框都不會這麼大，仍交給系統處理
+    static func isFullScreenOverlay(layer: Int, bounds: CGRect, displays: [CGRect]) -> Bool {
+        guard layer != 0 else { return false }
+        return displays.contains { display in
+            bounds.intersects(display)
+                && bounds.width >= display.width * 0.9 && bounds.height >= display.height * 0.9
+        }
+    }
+
+    private static func activeDisplayBounds() -> [CGRect] {
+        var count: UInt32 = 0
+        guard CGGetActiveDisplayList(0, nil, &count) == .success, count > 0 else { return [] }
+        var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
+        guard CGGetActiveDisplayList(count, &ids, &count) == .success else { return [] }
+        return ids.prefix(Int(count)).map(CGDisplayBounds)
+    }
 
     private struct WindowInfo {
         let number: Int

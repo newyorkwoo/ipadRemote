@@ -21,19 +21,34 @@ struct AgentMenuView: View {
     @State private var confirmRegenerate = false
     @State private var showCode = false
     @State private var removing: PairedDevice?
+    @State private var contentHeight: CGFloat = 600
+
+    /// 選單面板最高只到螢幕可用高度（扣掉選單列與邊距），超過時捲動
+    private var maxPanelHeight: CGFloat {
+        let visible = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame.height ?? 800
+        return max(300, visible - 40)
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            header
-            pairingCard
-            devicesCard
-            permissionsCard
-            networkCard
-            standbyCard
-            footer
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: 14) {
+                header
+                pairingCard
+                devicesCard
+                permissionsCard
+                TailnetCard(tailnet: agent.tailnet)
+                networkCard
+                standbyCard
+                footer
+            }
+            .padding(16)
+            .background(GeometryReader { proxy in
+                Color.clear.preference(key: PanelHeightKey.self, value: proxy.size.height)
+            })
         }
-        .padding(16)
-        .frame(width: 340)
+        .onPreferenceChange(PanelHeightKey.self) { contentHeight = $0 }
+        .scrollIndicators(contentHeight > maxPanelHeight ? .visible : .hidden)
+        .frame(width: 340, height: min(contentHeight, maxPanelHeight))
         .onAppear { agent.refresh() }
     }
 
@@ -147,16 +162,9 @@ struct AgentMenuView: View {
     private var networkCard: some View {
         Card(title: "網路與喚醒", systemImage: "network") {
             InfoRow(label: "區網 IP", value: agent.network?.ipv4 ?? "—")
-            if let tailscale = agent.tailscaleIP {
-                InfoRow(label: "Tailscale", value: tailscale)
-            } else {
-                HStack {
-                    Text("Tailscale").foregroundStyle(.secondary)
-                    Spacer()
-                    Link("未安裝・從不同網路連線請安裝", destination: URL(string: "https://tailscale.com/download/mac")!)
-                        .font(.caption)
-                }
-                .font(.callout)
+            // 另外安裝的 Tailscale App（選用；內嵌的「跨網路連線」已足夠）
+            if let tailscale = agent.tailscaleIP, tailscale != agent.tailnet.selfIPv4 {
+                InfoRow(label: "Tailscale App", value: tailscale)
             }
             InfoRow(label: "MAC 位址", value: agent.network?.mac ?? "—")
             InfoRow(label: "連接埠", value: "\(agent.port) (TCP)")
@@ -188,6 +196,65 @@ struct AgentMenuView: View {
             Spacer()
             Button("結束") { NSApp.terminate(nil) }
                 .controlSize(.small)
+        }
+    }
+}
+
+/// 內嵌 Tailscale：一鍵啟用、在瀏覽器登入一次，之後 iPad 從任何網路都能連入
+private struct TailnetCard: View {
+    @ObservedObject var tailnet: TailnetController
+    @State private var confirmLogout = false
+
+    var body: some View {
+        Card(title: "跨網路連線", systemImage: "globe") {
+            switch tailnet.phase {
+            case .off:
+                Text("啟用後，iPad 在外面（其他 Wi‑Fi、4G/5G）也能直接連回這台 Mac，不必設定路由器，也不用另外安裝 Tailscale。")
+                    .font(.caption2).foregroundStyle(.secondary)
+                Button {
+                    tailnet.enable()
+                } label: {
+                    Label("啟用並登入…", systemImage: "person.crop.circle.badge.checkmark")
+                }
+                .controlSize(.small)
+            case .starting:
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("連線中…").font(.callout).foregroundStyle(.secondary)
+                }
+            case .needsLogin(let url):
+                Text(url == nil
+                     ? "等待登入網址…（若你的 tailnet 需要核准新裝置，請到 Tailscale 管理頁核准）"
+                     : "請在瀏覽器用 Google、Apple、Microsoft 或 GitHub 帳號登入。iPad 上請登入同一個帳號。")
+                    .font(.caption2).foregroundStyle(.secondary)
+                HStack {
+                    Button("打開登入頁") { tailnet.openLogin() }
+                        .disabled(url == nil)
+                    Spacer()
+                    Button("取消") { tailnet.disable() }
+                }
+                .controlSize(.small)
+            case .running:
+                InfoRow(label: "狀態", value: "已啟用")
+                if let ip = tailnet.selfIPv4 { InfoRow(label: "位址", value: ip) }
+                if let account = tailnet.account { InfoRow(label: "帳號", value: account) }
+                Text("在 iPad 的「遠端 Mac」App 登入同一個帳號，這台 Mac 就會出現在清單中。連線內容仍由配對金鑰端對端加密。")
+                    .font(.caption2).foregroundStyle(.secondary)
+                HStack {
+                    Button("暫停") { tailnet.disable() }
+                    Spacer()
+                    Button("登出…", role: .destructive) { confirmLogout = true }
+                }
+                .controlSize(.small)
+            case .failed(let message):
+                Text("無法啟用：\(message)").font(.caption).foregroundStyle(.orange)
+                Button("重試") { tailnet.enable() }.controlSize(.small)
+            }
+        }
+        .confirmationDialog("登出跨網路連線？", isPresented: $confirmLogout) {
+            Button("登出", role: .destructive) { tailnet.logout() }
+        } message: {
+            Text("iPad 將無法再從其他網路連入，直到你重新登入。同一個區網內的連線不受影響。")
         }
     }
 }
@@ -240,4 +307,9 @@ private struct InfoRow: View {
         }
         .font(.callout)
     }
+}
+
+private struct PanelHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }

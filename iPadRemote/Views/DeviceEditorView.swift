@@ -68,7 +68,7 @@ struct DeviceEditorView: View {
                 } header: {
                     Text("從不同網路連線")
                 } footer: {
-                    Text("iPad 與 Mac 在不同 Wi‑Fi 時：請在兩台都安裝 Tailscale，然後填入 Mac 選單列顯示的 Tailscale 位址（100.x.x.x）。成功連線一次後，App 會記住 Mac 的所有位址，之後換到任何網路都會自動嘗試。不建議在路由器轉發連接埠（DDNS / 公網 IP），那會讓 Mac 直接暴露在網際網路上。")
+                    Text("通常不用填：在 Mac 選單列與「我的 Mac」頁面的「跨網路連線」登入同一個帳號，App 就會自動找到 Mac。已另外安裝 Tailscale App 的話，也可以填 Mac 的 Tailscale 位址（100.x.x.x）。不建議在路由器轉發連接埠（DDNS / 公網 IP），那會讓 Mac 直接暴露在網際網路上。")
                 }
 
                 Section {

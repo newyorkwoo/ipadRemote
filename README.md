@@ -9,6 +9,7 @@
 
 ## 功能
 
+- **跨網路連線（內建 Tailscale）**：兩個 App 都內嵌了 Tailscale（libtailscale / tsnet，使用者模式 WireGuard）。在 Mac 選單列與 iPad 各按一次「啟用並登入」、登入同一個帳號（Google、Apple、Microsoft 或 GitHub），iPad 在任何網路（別的 Wi‑Fi、4G/5G、電信 CGNAT）都能直接連回 Mac。不用另外安裝 Tailscale App、不用開 VPN、不用設定路由器。Mac 會自動出現在 iPad 的「附近的 Mac」。NAT 穿透與中繼由 Tailscale 負責，連線內容仍由下面的 TLS‑PSK 端對端加密。
 - **加密連線**：TLS 1.2 ECDHE‑PSK（`TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256`），具前向保密：即使金鑰日後外洩，也解不開先前錄下的連線。
 - **一次性配對碼 + 每台 iPad 專屬金鑰**：配對碼為 20 字元（約 100 bits），只用於第一次配對。配對成功後 Mac 發給這台 iPad 一把 256‑bit 專屬金鑰，並自動更換配對碼。之後每次連線，iPad 都用這把金鑰交握，並以綁定該連線的 HMAC 證明身分。Mac 選單列可以個別移除 iPad，被移除的 iPad 立即中斷且無法再連線，其他 iPad 不受影響。金鑰兩端都存在鑰匙圈（僅限本機，不進 iCloud）。
 - **其他保護**：iPad App 開啟、或離開超過 30 秒後回來，需要 Face ID / 密碼解鎖（可在「我的 Mac」右上角選單關閉），鎖定時不會送出任何輸入。有 iPad 開始控制或新配對時，Mac 會跳出通知，選單列可以一鍵中斷連線。貼上的文字只放在本機剪貼簿、標記為機密，貼上後立即還原。配對碼預設隱藏，拷貝後 60 秒自動清除。
@@ -22,7 +23,7 @@
   - 接上實體鍵盤時，按鍵以原始鍵碼送出，所以也可以直接用 **Mac 端的輸入法**打字。
   - ⚠️ 請關閉 iPad 的「設定 › 輔助使用 › 鍵盤 › **全鍵盤控制**」。開啟時系統會攔截空白鍵、Tab、方向鍵（畫面四周出現藍框），App 收不到這些按鍵，注音也打不出一聲。
 - **操作**：
-  - 直接觸控：點一下是左鍵，連點是雙擊，兩指點是右鍵，長按拖移是拖曳，兩指滑動是捲動。
+  - 直接觸控：點一下是左鍵，連點是雙擊，兩指點是右鍵，長按拖移是拖曳，單指或兩指滑動是捲動手指底下的內容（放手後有慣性，點一下停住）。
   - 觸控板模式：手指相對移動游標。
   - 巧控鍵盤的觸控板與滑鼠：游標、右鍵、捲動、拖曳都支援。
 - **Mac 介面大小（外接大螢幕用）**：在 iPad 上看 27 吋外接螢幕時字太小，可在工具列「螢幕」選單選「大／較大／最大」。Mac 會在連線期間暫時把該螢幕切到較低的「看起來像」解析度（約 1920／1600／1280 點寬，優先 HiDPI），斷線 8 秒後自動還原；Agent 結束或當機時系統也會自動還原。每台 Mac 各自記住設定。
@@ -31,16 +32,20 @@
 ## 建置
 
 ```bash
-brew install xcodegen   # 若尚未安裝
+brew install xcodegen          # 若尚未安裝
+Tools/build-tailscale.sh       # 第一次需要：編譯內嵌 Tailscale（需要 Go：https://go.dev/dl/），約 3–5 分鐘
 xcodegen generate
 open iPadRemote.xcodeproj
 ```
+
+`Tools/build-tailscale.sh` 會把固定版本的 [libtailscale](https://github.com/tailscale/libtailscale) 編成 `Vendor/CTailscale.xcframework`（macOS universal、iOS、iOS 模擬器；約 120 MB，不進 git）。要更新 Tailscale 版本時，改腳本裡的 `LIBTAILSCALE_REV` 再執行一次即可。
 
 1. 在 `project.yml` 填入 `DEVELOPMENT_TEAM`，或在 Xcode 的 Signing 頁面選擇你的 Team，然後把兩個 bundle ID 改成你自己的。
 2. 在 Mac 上執行 **MacAgent**，選單列會出現 iPad 圖示。
    - 授權「螢幕與系統錄音」和「輔助使用」（選單裡有按鈕）。
    - 勾選「登入時啟動」。
 3. 在 iPad 上執行 **iPadRemote**。在同一個 Wi‑Fi 下，「附近的 Mac」會自動出現；點一下並輸入配對碼即可。
+4. （選用，建議）兩邊都按「跨網路連線 › 啟用並登入」，登入同一個帳號。之後 iPad 在外面也能連線。
 
 ## 讓 Mac 可以被喚醒（重要）
 
@@ -62,14 +67,22 @@ sudo pmset -a tcpkeepalive 1
 
 > **Wi‑Fi 私密位址**：macOS 預設在每個 Wi‑Fi 網路使用「私密 Wi‑Fi 位址」，網路上看到的 MAC 和硬體 MAC 不同，而且一般程式讀不到這個私密位址。Agent 會盡量讀取私密位址，同時一定會送出硬體 MAC，所以 iPad 會對兩個位址都發送喚醒封包。最穩定的做法是到「系統設定 › Wi‑Fi › 家裡網路的詳細資訊」，把「私密 Wi‑Fi 位址」設為**關閉**。
 
-## iPad 與 Mac 在不同網路（建議設定）
+## iPad 與 Mac 在不同網路
 
-1. **兩台都安裝 [Tailscale](https://tailscale.com/download)**，並登入同一個帳號。不用設定路由器，電信業者共用 IP（CGNAT）也能連，連線另外有 WireGuard 加密。
-2. Mac 選單列 › **開啟「遠端待命」**（預設開啟），並保持 **接電源、上蓋打開**（或接外接螢幕）。
-   - 螢幕會照常關閉省電，但系統不會睡眠，iPad 從任何網路連入時會自動點亮螢幕。
-   - 接電源時 MacBook 待命大約只用幾瓦。macOS 用電池時會忽略這個設定。
-3. 在 iPad 加入 Mac 時，「從不同網路連線」欄位填入 Mac 選單列顯示的 **Tailscale 位址（100.x.x.x）**。
-4. 成功連線一次後，App 會記住 Mac 的所有位址（區網 + Tailscale）。之後換到任何網路，都會**同時嘗試所有位址**，用最先連上的那條。
+1. **Mac**：選單列 › 「跨網路連線」› **啟用並登入**。瀏覽器會打開 Tailscale 登入頁，用 Google / Apple / Microsoft / GitHub 帳號登入（第一次會自動建立免費的 Tailscale 帳號）。
+2. **iPad**：「我的 Mac」頁面底部 › 「跨網路連線」› **啟用並登入**，在 Safari 登入**同一個帳號**，完成後回到 App。
+3. Mac 會出現在 iPad 的「附近的 Mac」（標示「跨網路」）。第一次點一下並輸入配對碼即可；已經配對過的 Mac 不用重新配對，直接按「連線」。
+4. Mac 選單列 › **「遠端待命」保持開啟**（預設開啟），並保持 **接電源、上蓋打開**（或接外接螢幕）。螢幕會照常關閉省電，但系統不會睡眠，iPad 從任何網路連入時會自動點亮螢幕。
+
+之後 App 每次連線都會**同時嘗試所有路徑**（區網 Bonjour、區網 IP、內嵌 Tailscale、另外安裝的 Tailscale App），用最先連上的那條。
+
+說明：
+
+- 內嵌的是 Tailscale 官方的 libtailscale（tsnet）：App 行程裡跑一個使用者模式的 WireGuard 節點，**不會**安裝 VPN 設定檔、不影響 iPad / Mac 其他 App 的網路。節點在 tailnet 上的名稱是 `ipadremote-mac-…` / `ipadremote-ipad-…`，可以在 [Tailscale 管理頁](https://login.tailscale.com/admin/machines) 看到與移除。
+- 已經自己裝了 Tailscale App 也沒關係，兩者可以並存（內嵌節點會是 tailnet 上另一台裝置）。
+- 「暫停」只關掉內嵌節點，保留登入；「登出」會刪除這台裝置的 Tailscale 身分，下次要重新登入（管理頁上的舊裝置可手動移除）。
+- 進階：要改用自架的 [Headscale](https://github.com/juanfont/headscale)，在 Mac 執行 `defaults write com.steven.ipadremote.agent tailnet.controlURL https://你的網址` 後重新啟用（iPad 端目前沒有設定畫面）。
+- 安全性：Tailscale 只負責「找到路、穿過 NAT」；畫面與鍵盤滑鼠仍走原本的 TLS 1.2 ECDHE‑PSK，由配對金鑰端對端加密。同一個 tailnet 上的其他裝置沒有配對金鑰，連進來也無法完成交握。
 
 ### 為什麼不靠 Wake-on-LAN？
 
@@ -102,6 +115,7 @@ iPad                                              Mac
                                                   └─────────────────────────┘
 ```
 
+- `Tailnet/`：內嵌 Tailscale（libtailscale C API 的 Swift 包裝與狀態機），兩個 App 共用。Mac 端的 `TailnetGateway` 在 tailnet 上監聽 52800，轉給本機的 RemoteServer；iPad 端的 `TailnetDialer` 先在 tailnet 上撥號，成功後才開一個只接受一次的本機埠交給 NWConnection。原本的加密與協定完全不變。
 - `Shared/`：兩端共用的協定（`Protocol.swift`）、分框（`Framing.swift`）、加密參數（`SecureTransport.swift`）、影像封包格式和鑰匙圈工具。
 - **低延遲設計**：
   - Mac 使用硬體低延遲 H.264（Constrained High、不重排幀、編碼器內不排隊，本機實測每幀約 6 ms）。
@@ -118,8 +132,9 @@ Tools/run-simulation-tests.sh
 
 | 層級 | 內容 |
 |---|---|
-| Mac 單元測試（41 項） | 配對碼與金鑰推導、全部訊息編碼、加密交握、5 MB 封包、3000 個事件的順序、錯誤配對碼被拒、**線路上沒有明文**（經由代理監聽確認）、H.264 編碼後解碼、滑鼠鍵盤事件內容（只攔截檢查，不會真的移動游標）、中文與 emoji 輸入、斷線時放開按住的鍵、讀取輸入法、讀取 MAC 位址、AAC 聲音編解碼（音高、音量、立體聲）與加密傳送 |
+| Mac 單元測試（51 項） | 配對碼與金鑰推導、全部訊息編碼、加密交握、5 MB 封包、3000 個事件的順序、錯誤配對碼被拒、**線路上沒有明文**（經由代理監聽確認）、H.264 編碼後解碼、滑鼠鍵盤事件內容（只攔截檢查，不會真的移動游標）、中文與 emoji 輸入、斷線時放開按住的鍵、讀取輸入法、讀取 MAC 位址、AAC 聲音編解碼（音高、音量、立體聲）與加密傳送、內嵌 Tailscale 的節點命名與雙向位元組對接 |
 | iPad 單元測試（22 項） | 連線並記住 MAC、心跳延遲、斷線自動重連、Mac 長時間離線後回來、**睡眠 → 自動 Wake‑on‑LAN → 醒來 → 自動重連**、半開連線靠心跳偵測、配對碼錯誤時停止重試、使用者結束後不再重連、魔術封包格式與實際 UDP 送出、實體鍵盤鍵碼、H.264 解碼與解析度變更、聲音解碼與開關、每幀回報與背景解碼（主執行緒忙碌時不受影響） |
+| 內嵌 Tailscale 端對端（`Tools/TailnetE2E/run.sh`） | 本機跑測試用 Tailscale 控制伺服器 + DERP/STUN（不需要帳號），建立兩個真正的 tsnet 節點：iPad 依名稱在 tailnet 上找到 Mac、經 tailnet 用配對碼完成 TLS‑PSK 配對並收到 H.264 畫面、再用裝置金鑰重新連線；配對碼錯誤時交握失敗；Mac 沒開埠或節點不存在時在撥號階段就回報失敗（不會被誤判為配對碼錯誤）。需要先執行 `Tools/build-tailscale.sh` |
 | 端對端 UI 測試 | 真正的 iPad App 搭配 `Tools/FakeMac`（模擬 Mac 的程式，走同樣的加密連線和 H.264 串流）：加入 Mac、連線、點擊、雙擊、右鍵、拖曳、切換輸入法、輸入中英文、特殊鍵、⌘ 快捷鍵、睡眠後自動喚醒重連。截圖輸出到 `TestResults/screenshots/` |
 
 ## 已知限制

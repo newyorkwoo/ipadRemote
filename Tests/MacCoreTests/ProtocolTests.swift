@@ -105,4 +105,16 @@ final class VideoPacketTests: XCTestCase {
             _ = VideoPacket(data: noise)
         }
     }
+
+    func testInputSourceChineseDisplayNames() {
+        func name(_ id: String, _ mac: String = "Mac name") -> String {
+            InputSourceInfo(id: id, name: mac, isSelected: false).displayName
+        }
+        XCTAssertEqual(name("com.apple.inputmethod.TCIM.Zhuyin", "Zhuyin - Traditional"), "注音")
+        XCTAssertEqual(name("com.apple.inputmethod.TCIM.Cangjie"), "倉頡")
+        XCTAssertEqual(name("com.apple.inputmethod.SCIM.ITABC"), "拼音（簡體）")
+        XCTAssertEqual(name("com.apple.inputmethod.Kotoeri.RomajiTyping.Japanese"), "日文")
+        XCTAssertEqual(name("com.apple.keylayout.ABC"), "ABC")
+        XCTAssertEqual(name("com.example.thirdparty.IM", "嘸蝦米"), "嘸蝦米", "不認得的維持 Mac 給的名稱")
+    }
 }

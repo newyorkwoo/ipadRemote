@@ -154,9 +154,12 @@ struct RemoteSessionView: View {
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(1)
             if let ms = client.latencyMs, client.state == .connected {
-                Text("\(ms) ms")
+                // 網路延遲：iPad 送出的操作到 Mac 再回來所花的時間（毫秒），不是倒數計時
+                Label("\(ms) ms", systemImage: "wifi")
+                    .labelStyle(.titleAndIcon)
                     .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(ms < 60 ? Color.secondary : (ms < 150 ? Color.orange : Color.red))
+                    .help("網路延遲（來回毫秒數）")
             }
             Image(systemName: "lock.fill")
                 .font(.caption2)
@@ -176,9 +179,9 @@ struct RemoteSessionView: View {
                         client.send(.selectInputSource(id: source.id))
                     } label: {
                         if source.isSelected {
-                            Label(source.name, systemImage: "checkmark")
+                            Label(source.displayName, systemImage: "checkmark")
                         } else {
-                            Text(source.name)
+                            Text(source.displayName)
                         }
                     }
                 }
@@ -190,7 +193,7 @@ struct RemoteSessionView: View {
             HStack(spacing: 4) {
                 Image(systemName: "globe")
                 if let current = client.inputSources.first(where: \.isSelected) {
-                    Text(current.name)
+                    Text(current.displayName)
                         .font(.caption.weight(.semibold))
                         .lineLimit(1)
                         .frame(maxWidth: 80)
@@ -414,6 +417,15 @@ private struct KeyboardPanel: View {
                               liveMode: liveTyping,
                               resetToken: fieldResetToken,
                               isFocused: $textFocused,
+                              macInputSourceID: client.inputSources.first(where: \.isSelected)?.id,
+                              onKeyboardChanged: { language, identifier in
+                                  let sources = client.inputSources
+                                  guard let i = KeyboardMatching.macSourceIndex(forIPadLanguage: language,
+                                                                                identifier: identifier,
+                                                                                sources: sources),
+                                        !sources[i].isSelected else { return }
+                                  client.send(.selectInputSource(id: sources[i].id))
+                              },
                               onInsert: { text in sendText(text) },
                               onDelete: { count in
                                   for _ in 0..<count { client.send(.keyPress(keyCode: MacKey.delete, modifiers: [])) }

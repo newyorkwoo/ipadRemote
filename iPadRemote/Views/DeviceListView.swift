@@ -11,6 +11,7 @@ struct DeviceListView: View {
     @EnvironmentObject private var store: DeviceStore
     @EnvironmentObject private var browser: BonjourBrowser
     @EnvironmentObject private var lock: AppLock
+    @EnvironmentObject private var tailnet: TailnetController
     @State private var editing: EditorTarget?
     @State private var session: SavedMac?
     @State private var toast: String?
@@ -19,6 +20,31 @@ struct DeviceListView: View {
     private var newlyDiscovered: [DiscoveredMac] {
         browser.discovered.filter { found in
             !store.devices.contains { $0.hostID != nil && $0.hostID == found.hostID }
+        }
+    }
+
+    /// tailnet 上找到、但還沒加入的 Mac（區網已經找到的不重複列出）
+    private var tailnetDiscovered: [TailnetMac] {
+        guard tailnet.isRunning else { return [] }
+        return tailnet.peers.compactMap { peer -> TailnetMac? in
+            guard let ip = peer.ipv4, let parsed = TailnetNaming.parseMac(peer.hostName) else { return nil }
+            let known = store.devices.contains {
+                TailnetNaming.matches(hostID: $0.hostID, idTag: parsed.idTag) || ($0.knownAddresses ?? []).contains(ip)
+            }
+            let onLAN = newlyDiscovered.contains { TailnetNaming.matches(hostID: $0.hostID, idTag: parsed.idTag) }
+            guard !known, !onLAN else { return nil }
+            return TailnetMac(name: parsed.displayName, ipv4: ip, online: peer.online)
+        }
+    }
+
+    /// 這台 Mac 目前在 tailnet 上是否在線
+    private func onlineViaTailnet(_ device: SavedMac) -> Bool {
+        guard tailnet.isRunning else { return false }
+        return tailnet.peers.contains { peer in
+            guard peer.online else { return false }
+            if let parsed = TailnetNaming.parseMac(peer.hostName),
+               TailnetNaming.matches(hostID: device.hostID, idTag: parsed.idTag) { return true }
+            return peer.ipv4.map { (device.knownAddresses ?? []).contains($0) } ?? false
         }
     }
 
@@ -39,6 +65,7 @@ struct DeviceListView: View {
                             ForEach(store.devices) { device in
                                 DeviceCard(device: device,
                                            isOnline: browser.isOnline(device),
+                                           isOnlineViaTailnet: onlineViaTailnet(device),
                                            onConnect: { session = device },
                                            onWake: { wake(device) },
                                            onEdit: {
@@ -51,9 +78,11 @@ struct DeviceListView: View {
                         }
                     }
 
-                    if !newlyDiscovered.isEmpty {
+                    if !newlyDiscovered.isEmpty || !tailnetDiscovered.isEmpty {
                         discoveredSection
                     }
+
+                    TailnetSection(tailnet: tailnet)
                 }
                 .padding(24)
             }
@@ -124,7 +153,36 @@ struct DeviceListView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    if found.id != newlyDiscovered.last?.id {
+                    if found.id != newlyDiscovered.last?.id || !tailnetDiscovered.isEmpty {
+                        Divider().padding(.leading, 62)
+                    }
+                }
+                ForEach(tailnetDiscovered) { found in
+                    Button {
+                        var device = SavedMac(name: found.name)
+                        device.knownAddresses = [found.ipv4]
+                        editing = EditorTarget(device: device, pairingCode: "", isNew: true)
+                    } label: {
+                        HStack(spacing: 14) {
+                            Image(systemName: "globe")
+                                .font(.title3)
+                                .foregroundStyle(.blue)
+                                .frame(width: 32)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(found.name).foregroundStyle(.primary)
+                                Text(found.online ? "跨網路・點一下以配對" : "跨網路・目前離線")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right").font(.footnote.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    if found.id != tailnetDiscovered.last?.id {
                         Divider().padding(.leading, 62)
                     }
                 }
@@ -152,9 +210,109 @@ struct DeviceListView: View {
     }
 }
 
+private struct TailnetMac: Identifiable, Hashable {
+    var id: String { ipv4 }
+    var name: String
+    var ipv4: String
+    var online: Bool
+}
+
+/// 內嵌 Tailscale：登入一次，之後 iPad 在任何網路都能連回 Mac（不用安裝 Tailscale App、不用 VPN）
+private struct TailnetSection: View {
+    @ObservedObject var tailnet: TailnetController
+    @State private var confirmLogout = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("跨網路連線")
+                .font(.title3.weight(.semibold))
+            HStack(alignment: .top, spacing: 14) {
+                Image(systemName: icon)
+                    .font(.title2)
+                    .foregroundStyle(tailnet.isRunning ? .green : .blue)
+                    .frame(width: 32)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(title).font(.headline)
+                    Text(detail).font(.subheadline).foregroundStyle(.secondary)
+                    actions.padding(.top, 4)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(16)
+            .background(Color(.secondarySystemGroupedBackground),
+                        in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .confirmationDialog("登出跨網路連線？", isPresented: $confirmLogout, titleVisibility: .visible) {
+            Button("登出", role: .destructive) { tailnet.logout() }
+        } message: {
+            Text("登出後只能在同一個 Wi‑Fi 下連線，直到重新登入。")
+        }
+    }
+
+    private var icon: String {
+        switch tailnet.phase {
+        case .running: return "checkmark.circle.fill"
+        case .failed: return "exclamationmark.triangle.fill"
+        default: return "globe"
+        }
+    }
+
+    private var title: String {
+        switch tailnet.phase {
+        case .off: return "在外面也能連回家裡的 Mac"
+        case .starting: return "連線中…"
+        case .needsLogin: return "請完成登入"
+        case .running: return "已啟用" + (tailnet.account.map { "・\($0)" } ?? "")
+        case .failed(let message): return "無法啟用：\(message)"
+        }
+    }
+
+    private var detail: String {
+        switch tailnet.phase {
+        case .off:
+            return "在 Mac 選單列的「跨網路連線」與這裡登入同一個帳號（Google、Apple、Microsoft 或 GitHub），iPad 在其他 Wi‑Fi 或行動網路時也能直接連線，不必設定路由器。"
+        case .starting:
+            return "正在連上 Tailscale 網路。"
+        case .needsLogin(let url):
+            return url == nil ? "等待登入網址…若你的網路需要核准新裝置，請到 Tailscale 管理頁核准。"
+                              : "請在 Safari 登入與 Mac 相同的帳號，完成後回到這個 App。"
+        case .running:
+            return "已登入同一帳號的 Mac 會自動出現在「附近的 Mac」。連線內容仍由配對金鑰端對端加密。"
+        case .failed:
+            return "請確認網路正常後再試一次。"
+        }
+    }
+
+    @ViewBuilder private var actions: some View {
+        switch tailnet.phase {
+        case .off, .failed:
+            Button("啟用並登入") { tailnet.enable() }
+                .buttonStyle(.borderedProminent)
+        case .starting:
+            ProgressView()
+        case .needsLogin(let url):
+            HStack {
+                Button("打開登入頁") { tailnet.openLogin() }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(url == nil)
+                Button("取消") { tailnet.disable() }
+                    .buttonStyle(.bordered)
+            }
+        case .running:
+            HStack {
+                Button("暫停") { tailnet.disable() }
+                    .buttonStyle(.bordered)
+                Button("登出", role: .destructive) { confirmLogout = true }
+                    .buttonStyle(.bordered)
+            }
+        }
+    }
+}
+
 private struct DeviceCard: View {
     let device: SavedMac
     let isOnline: Bool
+    let isOnlineViaTailnet: Bool
     let onConnect: () -> Void
     let onWake: () -> Void
     let onEdit: () -> Void
@@ -191,7 +349,7 @@ private struct DeviceCard: View {
                     .lineLimit(1)
                 HStack(spacing: 6) {
                     Circle()
-                        .fill(isOnline ? Color.green : Color.secondary.opacity(0.5))
+                        .fill(isOnline || isOnlineViaTailnet ? Color.green : Color.secondary.opacity(0.5))
                         .frame(width: 8, height: 8)
                     Text(statusText)
                         .font(.subheadline)
@@ -227,6 +385,7 @@ private struct DeviceCard: View {
 
     private var statusText: String {
         if isOnline { return "在線・區域網路" }
+        if isOnlineViaTailnet { return "在線・跨網路連線" }
         if !device.host.isEmpty { return "將透過 \(device.host) 連線" }
         if device.tailscaleAddress != nil { return "不在同一個網路・將透過 Tailscale 連線" }
         if let last = device.lastConnected {
@@ -240,18 +399,19 @@ private struct DeviceCard: View {
 private struct SessionContainer: View {
     @EnvironmentObject private var store: DeviceStore
     @EnvironmentObject private var browser: BonjourBrowser
+    @EnvironmentObject private var tailnet: TailnetController
     let device: SavedMac
 
     var body: some View {
-        SessionHost(device: device, browser: browser, store: store)
+        SessionHost(device: device, browser: browser, tailnet: tailnet, store: store)
     }
 }
 
 private struct SessionHost: View {
     @StateObject private var client: RemoteClient
 
-    init(device: SavedMac, browser: BonjourBrowser, store: DeviceStore) {
-        let client = RemoteClient(device: device, browser: browser)
+    init(device: SavedMac, browser: BonjourBrowser, tailnet: TailnetController, store: DeviceStore) {
+        let client = RemoteClient(device: device, browser: browser, tailnet: tailnet)
         client.onHostInfo = { [weak store] info, quality in
             store?.update(device.id, with: info, quality: quality)
         }

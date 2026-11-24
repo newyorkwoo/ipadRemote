@@ -59,6 +59,8 @@ final class RemoteClient: ObservableObject {
     var onHostInfo: ((HostInfo, StreamQuality) -> Void)?
 
     private let browser: BonjourBrowser
+    /// 內嵌 Tailscale（啟用時，換到任何網路都能連回 Mac）
+    private let tailnet: TailnetController?
     private var connection: NWConnection?
     private var racing: [NWConnection] = []
     private var channel: MessageChannel?
@@ -71,6 +73,11 @@ final class RemoteClient: ObservableObject {
     private struct MediaState { var generation = 0; var audioEnabled = true }
     private let media = Locked(MediaState())
     private var attempt = 0
+    /// 這一輪連線競賽的狀態
+    private var raceSawTLSError = false
+    private var raceLastError: NWError?
+    private var pendingTailnetDials = 0
+    private var tailnetObserver: AnyCancellable?
     private var tlsFailures = 0
     private var userStopped = true
     private var hasConnectedOnce = false
@@ -88,9 +95,10 @@ final class RemoteClient: ObservableObject {
     private static let deadAfter: TimeInterval = 7
     private static let connectTimeout: TimeInterval = 8
 
-    init(device: SavedMac, browser: BonjourBrowser) {
+    init(device: SavedMac, browser: BonjourBrowser, tailnet: TailnetController? = nil) {
         self.device = device
         self.browser = browser
+        self.tailnet = tailnet
         self.quality = device.quality
         self.interfaceScale = UserDefaults.standard.string(forKey: Self.interfaceScaleKey(device.id))
             .flatMap(InterfaceScale.init(rawValue:)) ?? .native
@@ -98,6 +106,14 @@ final class RemoteClient: ObservableObject {
         renderer.onNeedKeyframe = { [weak self] in DispatchQueue.main.async { self?.requestKeyframeThrottled() } }
         let audioOn = audioEnabled
         media.withLock { $0.audioEnabled = audioOn }
+        // tailnet 上線（例如 App 回到前景）時，正在重試的連線立即再試，不必等退避計時
+        tailnetObserver = tailnet?.$phase.removeDuplicates().sink { [weak self] phase in
+            guard let self, phase == .running, !self.userStopped, self.state != .connected else { return }
+            DispatchQueue.main.async {
+                self.attempt = 0
+                self.openConnection()
+            }
+        }
     }
 
     deinit {
@@ -194,6 +210,21 @@ final class RemoteClient: ObservableObject {
         return list
     }
 
+    /// 透過內嵌 Tailscale 可以撥的位址：Mac 回報過的 Tailscale 位址 + tailnet 上屬於這台 Mac 的節點
+    func tailnetTargets() -> [String] {
+        guard let tailnet, tailnet.isRunning else { return [] }
+        var list: [String] = []
+        for peer in tailnet.peers {
+            guard let ip = peer.ipv4, let parsed = TailnetNaming.parseMac(peer.hostName),
+                  TailnetNaming.matches(hostID: device.hostID, idTag: parsed.idTag) else { continue }
+            list.append(ip)
+        }
+        let known = (device.knownAddresses ?? []) + [device.host]
+        list += known.map { $0.trimmingCharacters(in: .whitespaces) }.filter(NetworkAddress.isTailscale)
+        var seen = Set<String>()
+        return list.filter { seen.insert($0).inserted }
+    }
+
     private func cancelConnections() {
         connection?.cancel()
         racing.forEach { $0.cancel() }
@@ -222,7 +253,8 @@ final class RemoteClient: ObservableObject {
         }
 
         let endpoints = candidateEndpoints()
-        guard !endpoints.isEmpty else {
+        let tailnetHosts = tailnetTargets()
+        guard !endpoints.isEmpty || !tailnetHosts.isEmpty else {
             connectionLost(gen, reason: device.hasRemoteRoute ? "找不到這台 Mac" : Self.noRouteHint)
             return
         }
@@ -231,52 +263,26 @@ final class RemoteClient: ObservableObject {
             state = .connecting
         }
 
-        var sawTLSError = false
-        var lastError: NWError?
+        raceSawTLSError = false
+        raceLastError = nil
+        pendingTailnetDials = 0
         for endpoint in endpoints {
-            let candidate = NWConnection(to: endpoint, using: SecureTransport.parameters(credentials: [psk]))
-            racing.append(candidate)
-            candidate.stateUpdateHandler = { [weak self, weak candidate] newState in
-              DispatchQueue.main.async {
-                guard let self, let candidate, gen == self.generation else { return }
-                switch newState {
-                case .ready:
-                    if self.connection == nil {
-                        self.adopt(candidate, gen: gen)
-                    } else if self.connection !== candidate {
-                        candidate.cancel()
+            startCandidate(endpoint, psk: psk, paired: credential != nil, gen: gen)
+        }
+        // 內嵌 Tailscale：先在 tailnet 上撥號，成功後才加入競賽
+        if let node = tailnet?.node {
+            for host in tailnetHosts {
+                pendingTailnetDials += 1
+                TailnetDialer.endpoint(via: node, host: host, port: device.port) { [weak self] endpoint in
+                    guard let self, gen == self.generation else { return }
+                    self.pendingTailnetDials -= 1
+                    if let endpoint, self.connection == nil {
+                        self.startCandidate(endpoint, psk: psk, paired: credential != nil, gen: gen)
+                    } else {
+                        self.raceCandidateFinished(gen, paired: credential != nil)
                     }
-                case .waiting(let error), .failed(let error):
-                    if self.connection === candidate {
-                        // 已建立的連線之後才斷掉
-                        self.connectionLost(gen, reason: Self.describe(error))
-                        return
-                    }
-                    guard self.racing.contains(where: { $0 === candidate }) else { return }
-                    self.racing.removeAll { $0 === candidate }
-                    candidate.cancel()
-                    if case .tls = error { sawTLSError = true }
-                    lastError = error
-                    guard self.racing.isEmpty, self.connection == nil else { return }
-                    // 所有路徑都失敗
-                    if sawTLSError {
-                        self.tlsFailures += 1
-                        if self.tlsFailures >= 3 {
-                            self.fail(credential == nil
-                                      ? "加密交握失敗：配對碼不正確或已失效（配對碼只能使用一次）。請在 Mac 選單列取得目前的配對碼。"
-                                      : "加密交握失敗：這台 iPad 的配對可能已在 Mac 上被移除。請在 Mac 選單列取得新的配對碼，編輯這台 Mac 重新配對。")
-                            return
-                        }
-                    }
-                    let reason = lastError.map(Self.describe) ?? "無法連線"
-                    self.connectionLost(gen, reason: self.device.hasRemoteRoute || self.attempt < 2
-                                        ? reason : "\(reason)\n\(Self.noRouteHint)")
-                default:
-                    break
                 }
-              }
             }
-            candidate.start(queue: netQueue)
         }
 
         // 連線逾時保護（例如 Mac 睡眠中 SYN 沒有回應）
@@ -284,6 +290,56 @@ final class RemoteClient: ObservableObject {
             guard let self, gen == self.generation, self.state != .connected else { return }
             self.connectionLost(gen, reason: "連線逾時，Mac 可能正在休眠或不在同一個網路")
         }
+    }
+
+    private func startCandidate(_ endpoint: NWEndpoint, psk: PSKCredential, paired: Bool, gen: Int) {
+        let candidate = NWConnection(to: endpoint, using: SecureTransport.parameters(credentials: [psk]))
+        racing.append(candidate)
+        candidate.stateUpdateHandler = { [weak self, weak candidate] newState in
+          DispatchQueue.main.async {
+            guard let self, let candidate, gen == self.generation else { return }
+            switch newState {
+            case .ready:
+                if self.connection == nil {
+                    self.adopt(candidate, gen: gen)
+                } else if self.connection !== candidate {
+                    candidate.cancel()
+                }
+            case .waiting(let error), .failed(let error):
+                if self.connection === candidate {
+                    // 已建立的連線之後才斷掉
+                    self.connectionLost(gen, reason: Self.describe(error))
+                    return
+                }
+                guard self.racing.contains(where: { $0 === candidate }) else { return }
+                self.racing.removeAll { $0 === candidate }
+                candidate.cancel()
+                if case .tls = error { self.raceSawTLSError = true }
+                self.raceLastError = error
+                self.raceCandidateFinished(gen, paired: paired)
+            default:
+                break
+            }
+          }
+        }
+        candidate.start(queue: netQueue)
+    }
+
+    /// 一條路徑失敗後呼叫：所有路徑（含仍在撥號的 tailnet）都失敗才算這一輪失敗
+    private func raceCandidateFinished(_ gen: Int, paired: Bool) {
+        guard gen == generation, racing.isEmpty, pendingTailnetDials == 0, connection == nil else { return }
+        if raceSawTLSError {
+            tlsFailures += 1
+            if tlsFailures >= 3 {
+                fail(!paired
+                     ? "加密交握失敗：配對碼不正確或已失效（配對碼只能使用一次）。請在 Mac 選單列取得目前的配對碼。"
+                     : "加密交握失敗：這台 iPad 的配對可能已在 Mac 上被移除。請在 Mac 選單列取得新的配對碼，編輯這台 Mac 重新配對。")
+                return
+            }
+        }
+        let reason = raceLastError.map(Self.describe) ?? "無法連線"
+        connectionLost(gen, reason: device.hasRemoteRoute || attempt < 2
+                       ? reason : "\(reason)\n\(Self.noRouteHint)")
     }
 
     private func adopt(_ connection: NWConnection, gen: Int) {
@@ -336,7 +392,7 @@ final class RemoteClient: ObservableObject {
         audio.reset()
     }
 
-    static let noRouteHint = "iPad 與 Mac 不在同一個網路時，請在 Mac 安裝 Tailscale，或在設定中填入外部位址。"
+    static let noRouteHint = "iPad 與 Mac 不在同一個網路時，請在 Mac 選單列與這台 iPad 的「跨網路連線」登入同一個帳號。"
 
     private func connectionLost(_ gen: Int, reason: String) {
         guard gen == generation, !userStopped else { return }

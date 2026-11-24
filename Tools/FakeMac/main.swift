@@ -73,9 +73,17 @@ final class FakeMac {
         let listener = try! NWListener(using: params, on: NWEndpoint.Port(rawValue: port)!)
         listener.service = NWListener.Service(name: "模擬 Mac", type: RemoteConstants.bonjourType,
                                               domain: nil, txtRecord: NWTXTRecord(["id": "fake-mac", "v": "1"]))
-        listener.stateUpdateHandler = { state in
+        listener.stateUpdateHandler = { [weak self] state in
+            guard let self else { return }
             if case .ready = state { log("🟢 監聽中（TCP \(port)，ECDHE-PSK 加密，已配對 \(self.pairedKeys.count) 台）") }
-            if case .failed(let e) = state { log("❌ 監聽失敗：\(e)") }
+            if case .failed(let e) = state {
+                // 舊的監聽可能還沒釋放連接埠（例如配對後立即換金鑰重新監聽）：稍後重試
+                log("❌ 監聽失敗：\(e)，稍後重試")
+                self.q.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                    guard let self, self.listener === listener else { return }
+                    self.startListener()
+                }
+            }
         }
         listener.newConnectionHandler = { [weak self] c in self?.accept(c) }
         listener.start(queue: q)

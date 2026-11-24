@@ -21,6 +21,11 @@ targets:
     sources:
       - path: iPadRemote
       - path: Shared
+      - path: Tailnet
+    dependencies:
+      # 內嵌 Tailscale（靜態函式庫）：先執行 Tools/build-tailscale.sh 產生
+      - framework: Vendor/CTailscale.xcframework
+        embed: false
     info:
       path: iPadRemote/Info.plist
       properties:
@@ -53,6 +58,10 @@ targets:
     sources:
       - path: MacAgent
       - path: Shared
+      - path: Tailnet
+    dependencies:
+      - framework: Vendor/CTailscale.xcframework
+        embed: false
     info:
       path: MacAgent/Info.plist
       properties:
@@ -83,6 +92,7 @@ targets:
         excludes:
           - MacAgentApp.swift
           - AgentController.swift
+          - TailnetGateway.swift
           - "*.plist"
           - "*.entitlements"
           - Assets.xcassets

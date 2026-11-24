@@ -5,7 +5,7 @@ import SwiftUI
 
 /// 顯示遠端畫面並把觸控 / 觸控板 / 實體鍵盤轉成 Mac 的輸入事件
 ///
-/// 直接觸控模式：游標跟著手指；點一下 = 左鍵，兩指點 = 右鍵，長按後拖移 = 拖曳，兩指滑動 = 捲動
+/// 直接觸控模式：像在 iPad 上操作網頁；點一下 = 左鍵，兩指點 = 右鍵，長按後拖移 = 拖曳，單指或兩指滑動 = 捲動手指底下的內容（放手後帶慣性）
 /// 觸控板模式：手指相對移動游標（像 MacBook 觸控板）
 /// 實體滑鼠 / 巧控板：游標跟著 iPad 指標，左鍵 / 右鍵 / 中鍵按下與放開即時送出，可按住拖曳、雙擊、⌘ 點按
 final class RemoteCanvasView: UIView, UIGestureRecognizerDelegate, UIPointerInteractionDelegate {
@@ -20,6 +20,11 @@ final class RemoteCanvasView: UIView, UIGestureRecognizerDelegate, UIPointerInte
     private var lastTap: (time: TimeInterval, point: CGPoint, count: Int)?
     private var lastPan: CGPoint = .zero
     private var lastScroll: CGPoint = .zero
+    /// 不足 1 像素的捲動量先累積，避免慢慢滑時被四捨五入吃掉
+    private var scrollRemainder: CGPoint = .zero
+    private var inertiaLink: CADisplayLink?
+    private var inertiaVelocity: CGPoint = .zero
+    private let scrollGain: CGFloat = 2
     private let trackpadSensitivity: CGFloat = 1.6
     private var lastTouchIsPointer = false
 
@@ -139,6 +144,8 @@ final class RemoteCanvasView: UIView, UIGestureRecognizerDelegate, UIPointerInte
     }
 
     @objc private func handleTap(_ gesture: UITapGestureRecognizer) {
+        // 慣性捲動中點一下 = 停住（像 iOS），不送出點擊
+        if inertiaLink != nil { stopInertia(); return }
         becomeFirstResponder()   // 點遠端畫面 = 結束輸入框，鍵盤回到 Mac
         reclaimKeyboardIfNeeded()
         let point = gesture.location(in: self)
@@ -162,17 +169,14 @@ final class RemoteCanvasView: UIView, UIGestureRecognizerDelegate, UIPointerInte
     }
 
     @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
+        // 直接觸控：單指滑動 = 捲動（像 iPad 上滑網頁）；觸控板模式：移動游標
+        guard trackpadMode else { handleScroll(gesture); return }
         let point = gesture.location(in: self)
         switch gesture.state {
         case .began:
             lastPan = point
-            if !trackpadMode { moveAbsolute(to: point) }
         case .changed:
-            if trackpadMode {
-                moveRelative(by: CGPoint(x: point.x - lastPan.x, y: point.y - lastPan.y))
-            } else {
-                moveAbsolute(to: point)
-            }
+            moveRelative(by: CGPoint(x: point.x - lastPan.x, y: point.y - lastPan.y))
             lastPan = point
         default:
             break
@@ -183,6 +187,7 @@ final class RemoteCanvasView: UIView, UIGestureRecognizerDelegate, UIPointerInte
         let point = gesture.location(in: self)
         switch gesture.state {
         case .began:
+            stopInertia()
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             lastPan = point
             if !trackpadMode { moveAbsolute(to: point) }
@@ -205,15 +210,55 @@ final class RemoteCanvasView: UIView, UIGestureRecognizerDelegate, UIPointerInte
         let translation = gesture.translation(in: self)
         switch gesture.state {
         case .began:
+            stopInertia()
             lastScroll = translation
+            scrollRemainder = .zero
+            // 觸控螢幕捲動：先把游標移到手指位置，Mac 才會捲動手指底下的視窗（觸控板捲動則留在原位）
+            if gesture.numberOfTouches > 0, !trackpadMode || lastTouchIsPointer {
+                moveAbsolute(to: gesture.location(in: self))
+            }
         case .changed:
             let dx = translation.x - lastScroll.x
             let dy = translation.y - lastScroll.y
             lastScroll = translation
-            send(.scroll(dx: dx * 2, dy: dy * 2))
+            sendScroll(dx: dx * scrollGain, dy: dy * scrollGain)
+        case .ended:
+            // 觸控滑動放手後延續慣性（巧控板的捲動由系統自己處理慣性）
+            if !gesture.allowedTouchTypes.isEmpty {
+                startInertia(velocity: gesture.velocity(in: self))
+            }
         default:
             break
         }
+    }
+
+    private func sendScroll(dx: CGFloat, dy: CGFloat) {
+        let x = scrollRemainder.x + dx, y = scrollRemainder.y + dy
+        let sx = x.rounded(.towardZero), sy = y.rounded(.towardZero)
+        scrollRemainder = CGPoint(x: x - sx, y: y - sy)
+        if sx != 0 || sy != 0 { send(.scroll(dx: sx, dy: sy)) }
+    }
+
+    private func startInertia(velocity: CGPoint) {
+        guard hypot(velocity.x, velocity.y) > 150 else { return }
+        inertiaVelocity = velocity
+        let link = CADisplayLink(target: self, selector: #selector(stepInertia))
+        link.add(to: .main, forMode: .common)
+        inertiaLink = link
+    }
+
+    @objc private func stepInertia(_ link: CADisplayLink) {
+        let dt = CGFloat(max(link.targetTimestamp - link.timestamp, 1.0 / 120))
+        sendScroll(dx: inertiaVelocity.x * dt * scrollGain, dy: inertiaVelocity.y * dt * scrollGain)
+        let decay = pow(0.95, dt * 60)          // 約 0.95／幀（60Hz），與 iOS 一般捲動手感接近
+        inertiaVelocity = CGPoint(x: inertiaVelocity.x * decay, y: inertiaVelocity.y * decay)
+        if hypot(inertiaVelocity.x, inertiaVelocity.y) < 20 { stopInertia() }
+    }
+
+    private func stopInertia() {
+        inertiaLink?.invalidate()
+        inertiaLink = nil
+        inertiaVelocity = .zero
     }
 
     private var lastMouseDown: (time: TimeInterval, point: CGPoint, button: MouseButton, count: Int)?

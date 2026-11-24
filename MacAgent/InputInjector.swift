@@ -22,8 +22,16 @@ final class InputInjector {
 
     private var displayBounds: CGRect { CGDisplayBounds(displayID) }
 
+    /// 剛送出的游標位置。CGEvent 送出後，系統回報的游標位置要過一會兒才會更新（實測緊接著讀到的
+    /// 幾乎都是上一次的座標），點擊若用系統位置，會點在上一次的地方：要點兩次才有反應、
+    /// 點不到被蓋住的視窗。所以短時間內以自己送出的位置為準；之後改回系統位置（Mac 上可能有人動了實體滑鼠）。
+    private var lastPosted: (point: CGPoint, time: TimeInterval)?
+    var now: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
+    private let postedLocationValidity: TimeInterval = 1.0
+
     private var currentLocation: CGPoint {
-        cursorLocation()
+        if let last = lastPosted, now() - last.time < postedLocationValidity { return last.point }
+        return cursorLocation()
     }
 
     // MARK: 滑鼠
@@ -55,6 +63,7 @@ final class InputInjector {
         let event = CGEvent(mouseEventSource: source, mouseType: type, mouseCursorPosition: point, mouseButton: button)
         event?.flags = cgFlags(heldModifiers)
         event.map(post)
+        lastPosted = (point, now())
     }
 
     func button(_ button: MouseButton, down: Bool, clickCount: Int, modifiers: Modifiers) {
@@ -69,6 +78,7 @@ final class InputInjector {
         event.setIntegerValueField(.mouseEventClickState, value: Int64(min(max(1, clickCount), 3)))
         event.flags = cgFlags(modifiers.union(heldModifiers))
         post(event)
+        lastPosted = (location, now())
         if down { pressedButtons.insert(button) } else { pressedButtons.remove(button) }
     }
 
@@ -85,6 +95,8 @@ final class InputInjector {
         let wheel2 = Int32(min(max(dx, -limit), limit).rounded())
         let event = CGEvent(scrollWheelEvent2Source: source, units: .pixel, wheelCount: 2,
                             wheel1: wheel1, wheel2: wheel2, wheel3: 0)
+        // 捲動送到剛移過去的位置（系統游標位置會落後，見 currentLocation）
+        event?.location = currentLocation
         event.map(post)
     }
 

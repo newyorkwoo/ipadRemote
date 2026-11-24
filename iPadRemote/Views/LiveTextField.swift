@@ -11,6 +11,10 @@ struct LiveTextField: UIViewRepresentable {
     /// 數值改變時清空輸入框（例如按了工具列的 ⌫ / 快捷鍵後，避免與 Mac 端文字不同步）
     var resetToken: Int = 0
     @Binding var isFocused: Bool
+    /// Mac 目前的輸入法 ID：iPad 會開啟對應的軟體鍵盤（例如注音）
+    var macInputSourceID: String? = nil
+    /// 使用者在 iPad 鍵盤上換了鍵盤（語言, 識別字串）
+    var onKeyboardChanged: (String, String) -> Void = { _, _ in }
     var onInsert: (String) -> Void
     var onDelete: (Int) -> Void
     var onReturn: (String) -> Void
@@ -45,6 +49,8 @@ struct LiveTextField: UIViewRepresentable {
         let wasLive = context.coordinator.parent.liveMode
         let oldToken = context.coordinator.parent.resetToken
         context.coordinator.parent = self
+        field.macInputSourceID = macInputSourceID
+        field.onKeyboardChanged = onKeyboardChanged
         if wasLive != liveMode || oldToken != resetToken {
             context.coordinator.committed = ""
             field.text = ""
@@ -143,6 +149,41 @@ struct LiveTextField: UIViewRepresentable {
 
 final class BackspaceAwareTextField: UITextField {
     var onEmptyBackspace: (() -> Void)?
+
+    /// Mac 切換輸入法時，iPad 的鍵盤跟著換（只在 Mac 那邊真的換了才動，使用者在 iPad 上自己按地球鍵切換的不會被蓋掉）
+    var macInputSourceID: String? {
+        didSet {
+            guard macInputSourceID != oldValue else { return }
+            preferredMode = KeyboardMatching.inputMode(forMacSource: macInputSourceID)
+            if isFirstResponder, preferredMode != nil, preferredMode != systemInputMode { reloadInputViews() }
+        }
+    }
+    private var preferredMode: UITextInputMode?
+    var onKeyboardChanged: (String, String) -> Void = { _, _ in }
+    private var modeObserver: NSObjectProtocol?
+
+    override var textInputMode: UITextInputMode? {
+        preferredMode ?? super.textInputMode
+    }
+
+    /// iPad 目前實際使用的鍵盤（不經過上面的偏好）
+    private var systemInputMode: UITextInputMode? { super.textInputMode }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        // 使用者按 iPad 鍵盤的地球鍵換鍵盤 → 記住這個選擇（之後不會被改回去），並通知 Mac 換成對應的輸入法
+        modeObserver = NotificationCenter.default.addObserver(
+            forName: UITextInputMode.currentInputModeDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self, self.isFirstResponder, let mode = self.systemInputMode else { return }
+            self.preferredMode = mode
+            let info = KeyboardMatching.describe(mode)
+            self.onKeyboardChanged(info.language, info.identifier)
+        }
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    deinit { modeObserver.map(NotificationCenter.default.removeObserver) }
 
     override func didMoveToWindow() {
         super.didMoveToWindow()

@@ -5,7 +5,9 @@ import Security
 enum Keychain {
     private static let service = "com.steven.ipadremote"
 
-    static func set(_ value: String, for account: String) {
+    /// 回傳是否寫入成功；失敗時不可靜默忽略（例如配對金鑰沒存到，之後就無法再連線）
+    @discardableResult
+    static func set(_ value: String, for account: String) -> Bool {
         let base: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -15,7 +17,11 @@ enum Keychain {
         var item = base
         item[kSecValueData as String] = Data(value.utf8)
         item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        SecItemAdd(item as CFDictionary, nil)
+        let status = SecItemAdd(item as CFDictionary, nil)
+        if status != errSecSuccess {
+            NSLog("鑰匙圈寫入失敗（\(account)）：\(status)")
+        }
+        return status == errSecSuccess
     }
 
     static func get(_ account: String) -> String? {

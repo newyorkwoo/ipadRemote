@@ -42,6 +42,8 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         NSLocalNetworkUsageDescription: 需要存取區域網路以尋找並連線到你的 Mac，以及送出喚醒封包。
+        # 只使用系統提供的標準加密（TLS 1.2、ChaCha20-Poly1305、HKDF/HMAC）；上架前請在 App Store Connect 再次確認出口合規問卷
+        ITSAppUsesNonExemptEncryption: false
         NSFaceIDUsageDescription: 使用 Face ID 解鎖 App，避免別人用你的 iPad 控制 Mac。
         NSBonjourServices:
           - _ipadremote._tcp
@@ -69,12 +71,15 @@ targets:
         CFBundleName: iPad Remote Agent
         LSUIElement: true
         NSLocalNetworkUsageDescription: 需要存取區域網路，讓你的 iPad 能找到並連線到這台 Mac。
+        ITSAppUsesNonExemptEncryption: false
         NSBonjourServices:
           - _ipadremote._tcp
     entitlements:
       path: MacAgent/MacAgent.entitlements
       properties:
-        com.apple.security.app-sandbox: false
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.server: true
+        com.apple.security.network.client: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.steven.ipadremote.agent

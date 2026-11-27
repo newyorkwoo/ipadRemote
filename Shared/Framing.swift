@@ -13,7 +13,15 @@ final class RemoteFramer: NWProtocolFramerImplementation {
     static var label: String { "iPadRemote" }
 
     private static let headerSize = 8
-    private static let maxPayload: UInt32 = 32 * 1024 * 1024
+    /// 每種訊息的長度上限（防止已連線但惡意或故障的對端用超大封包耗盡記憶體）
+    /// 控制訊息最大約 200,000 字的文字（含 JSON 跳脫）；影像最大 8 MB；聲音封包很小
+    private static func maxPayload(for type: FrameType) -> UInt32 {
+        switch type {
+        case .control: return 4 * 1024 * 1024
+        case .video: return 8 * 1024 * 1024
+        case .audio: return 1 * 1024 * 1024
+        }
+    }
 
     required init(framer: NWProtocolFramer.Instance) {}
     func start(framer: NWProtocolFramer.Instance) -> NWProtocolFramer.StartResult { .ready }
@@ -51,7 +59,7 @@ final class RemoteFramer: NWProtocolFramerImplementation {
             }
             guard parsed else { return Self.headerSize }
 
-            guard let frameType = FrameType(rawValue: type), length <= Self.maxPayload else {
+            guard let frameType = FrameType(rawValue: type), length <= Self.maxPayload(for: frameType) else {
                 framer.markFailed(error: .posix(.EBADMSG))
                 return 0
             }

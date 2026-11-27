@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		02E9DC394933BEC16283A521 /* KeyboardMatchingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61962F5D871C54164C3A41AC /* KeyboardMatchingTests.swift */; };
+		0567D2F816B76DB7480F4C8F /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = BBA6277DBB50631B9023528B /* PrivacyInfo.xcprivacy */; };
 		08F236DDA70EEF5BB7DFE0BA /* PairedDevices.swift in Sources */ = {isa = PBXBuildFile; fileRef = E48E5AF727C97E3764AB2570 /* PairedDevices.swift */; };
 		0AA0992F70AA24F4F8A1C649 /* TailnetGateway.swift in Sources */ = {isa = PBXBuildFile; fileRef = B74283D447CA5A18D27F21ED /* TailnetGateway.swift */; };
 		0C86113A2A7E2B96B596C767 /* TestHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25A2217DEA9337AFEF73BE04 /* TestHelpers.swift */; };
@@ -61,6 +62,7 @@
 		AB1EBC4D31C3370A448E8E7F /* InputSourceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A09A57144140739F4BEF25A /* InputSourceManager.swift */; };
 		ABE00C00C2165B802EA7B32B /* SystemInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8948AFC2BBFB05342134FA81 /* SystemInfo.swift */; };
 		AC3B30769654946428277BF8 /* RemoteSessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 246CD4F1BE4F4481D02EFB7F /* RemoteSessionView.swift */; };
+		AD034DC61ACCFEBF8B8FBD16 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = BBA6277DBB50631B9023528B /* PrivacyInfo.xcprivacy */; };
 		AD3B750FFBD1CD508F74A225 /* Framing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 287288382D265C12B460059F /* Framing.swift */; };
 		ADA9A3DF99A619BFFC2F15D0 /* RemoteServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5622AFD114398B13C11EFB9 /* RemoteServer.swift */; };
 		B8F11FDE428EC25F9B1AEA4A /* VideoPacket.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4BF64E2D60B9F34F6D1F306 /* VideoPacket.swift */; };
@@ -83,6 +85,7 @@
 		E75E249A2F60559929BBAB91 /* InputInjector.swift in Sources */ = {isa = PBXBuildFile; fileRef = A84D1A3E31E27254305B8553 /* InputInjector.swift */; };
 		E80ADA27F08B0D1B9B8760E1 /* CTailscale.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 19D6F057E8F35EC4594F6829 /* CTailscale.xcframework */; };
 		E85BEE522CCB71616B9D6240 /* TailnetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB759394A470B2CF1CA20C1E /* TailnetTests.swift */; };
+		EBE6833CB3296EFE959F3325 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F6CBD51CE2D02F26E8457908 /* PrivacyInfo.xcprivacy */; };
 		F288F8B7A1ADA3EBEE574F5A /* TCPBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = E27C660A7803CA297FFCDE00 /* TCPBridge.swift */; };
 		F55C05DE097D5113CF3C5F59 /* SecureTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54AB2732E21DF3ECC5A4B965 /* SecureTransport.swift */; };
 		F8F1465011CD0135B5BE1932 /* TCPBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = E27C660A7803CA297FFCDE00 /* TCPBridge.swift */; };
@@ -157,6 +160,7 @@
 		B4BF64E2D60B9F34F6D1F306 /* VideoPacket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoPacket.swift; sourceTree = "<group>"; };
 		B74283D447CA5A18D27F21ED /* TailnetGateway.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TailnetGateway.swift; sourceTree = "<group>"; };
 		B8C2B7C6E791410D8D762D67 /* iPadRemoteApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iPadRemoteApp.swift; sourceTree = "<group>"; };
+		BBA6277DBB50631B9023528B /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		C2308D3805D439C0AD699860 /* TailnetDialer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TailnetDialer.swift; sourceTree = "<group>"; };
 		CB759394A470B2CF1CA20C1E /* TailnetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TailnetTests.swift; sourceTree = "<group>"; };
 		D139D0C3A08A1FD46C92E80D /* DeviceEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceEditorView.swift; sourceTree = "<group>"; };
@@ -168,6 +172,7 @@
 		F0228484B08C0D516E21B494 /* Protocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Protocol.swift; sourceTree = "<group>"; };
 		F3B9F5A2A93502D8D3E5787A /* ProtocolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProtocolTests.swift; sourceTree = "<group>"; };
 		F5622AFD114398B13C11EFB9 /* RemoteServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteServer.swift; sourceTree = "<group>"; };
+		F6CBD51CE2D02F26E8457908 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		F82030708FEFEF40B56FFDA8 /* TailnetNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TailnetNode.swift; sourceTree = "<group>"; };
 		FB533AACBA66498B47A3CB15 /* Locked.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Locked.swift; sourceTree = "<group>"; };
 		FFB622A655698FB472B5CCE1 /* MacAgent.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MacAgent.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -318,6 +323,7 @@
 				6C24B1D09167E05C9E51A7FD /* Info.plist */,
 				5F94085571CFA64098BB83D7 /* iPadRemote.entitlements */,
 				B8C2B7C6E791410D8D762D67 /* iPadRemoteApp.swift */,
+				F6CBD51CE2D02F26E8457908 /* PrivacyInfo.xcprivacy */,
 				8543FD64B6B3EA05D0E51FAD /* Input */,
 				7363228F66288586229F543E /* Model */,
 				E4E31353092C92B468D80037 /* Networking */,
@@ -380,6 +386,7 @@
 				0707360C3A535D1BFEDE0C1B /* MacAgent.entitlements */,
 				7C1CD96B613D0EAC5676FF3D /* MacAgentApp.swift */,
 				E48E5AF727C97E3764AB2570 /* PairedDevices.swift */,
+				BBA6277DBB50631B9023528B /* PrivacyInfo.xcprivacy */,
 				F5622AFD114398B13C11EFB9 /* RemoteServer.swift */,
 				3DFB2BCBE37624DD6620C6CB /* ScreenStreamer.swift */,
 				8948AFC2BBFB05342134FA81 /* SystemInfo.swift */,
@@ -397,6 +404,7 @@
 			buildConfigurationList = 402D3A25AB726AEBAC364762 /* Build configuration list for PBXNativeTarget "MacCoreTests" */;
 			buildPhases = (
 				4CB571CAACA138F7A1EE4B7D /* Sources */,
+				2620EC64EDF44029F6FE06E5 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -540,6 +548,14 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		2620EC64EDF44029F6FE06E5 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AD034DC61ACCFEBF8B8FBD16 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		8C1CE6DB87248FCE06C62398 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -554,6 +570,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				8E67C653AAFF678DF0796AC9 /* Assets.xcassets in Resources */,
+				EBE6833CB3296EFE959F3325 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -562,6 +579,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA6958259DFE940F9D1757EC /* Assets.xcassets in Resources */,
+				0567D2F816B76DB7480F4C8F /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

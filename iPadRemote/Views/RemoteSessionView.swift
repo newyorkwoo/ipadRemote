@@ -161,6 +161,14 @@ struct RemoteSessionView: View {
                     .foregroundStyle(ms < 60 ? Color.secondary : (ms < 150 ? Color.orange : Color.red))
                     .help("網路延遲（來回毫秒數）")
             }
+            if let route = client.routeDescription {
+                // 連線路徑：區網、Tailscale 直連，或 Tailscale 中繼（中繼延遲通常較高）
+                Text(route)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .accessibilityIdentifier("connectionRoute")
+            }
             Image(systemName: "lock.fill")
                 .font(.caption2)
                 .foregroundStyle(.secondary)

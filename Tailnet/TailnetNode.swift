@@ -13,6 +13,10 @@ struct TailnetPeer: Hashable, Identifiable {
     var hostName: String
     var ipv4: String?
     var online: Bool
+    /// 目前直連使用的位址（如 "1.2.3.4:41641"）；走中繼時為 nil
+    var directAddress: String? = nil
+    /// 目前使用的 DERP 中繼區域代碼（如 "tyo"）；沒有中繼時為 nil
+    var relay: String? = nil
 }
 
 /// libtailscale（tsnet）的薄包裝：一個在 App 行程內執行的使用者模式 Tailscale 節點。
@@ -67,6 +71,8 @@ final class TailnetNode {
             var TailscaleIPs: [String]?
             var Online: Bool?
             var UserID: Int64?
+            var CurAddr: String?
+            var Relay: String?
         }
         struct Tailnet: Decodable { var Name: String? }
         struct User: Decodable { var LoginName: String?; var DisplayName: String? }
@@ -92,7 +98,9 @@ final class TailnetNode {
             guard let name = peer.HostName else { return nil }
             return TailnetPeer(hostName: name,
                                ipv4: peer.TailscaleIPs?.first(where: { $0.contains(".") }),
-                               online: peer.Online ?? false)
+                               online: peer.Online ?? false,
+                               directAddress: peer.CurAddr.flatMap { $0.isEmpty ? nil : $0 },
+                               relay: peer.Relay.flatMap { $0.isEmpty ? nil : $0 })
         }
         return Status(backendState: json.BackendState ?? "NoState",
                       authURL: json.AuthURL.flatMap { $0.isEmpty ? nil : URL(string: $0) },

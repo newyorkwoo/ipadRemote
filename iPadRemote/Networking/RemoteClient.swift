@@ -18,7 +18,15 @@ final class RemoteClient: ObservableObject {
         var accessibility = true
     }
 
+    /// 目前採用的連線路徑：區網直連，或經內嵌 Tailscale 的 tailnet 位址
+    enum ConnectionRoute: Equatable {
+        case lan
+        case tailnet(ip: String)
+    }
+
     @Published private(set) var state: State = .idle
+    /// 已連上時的連線路徑（顯示用）
+    @Published private(set) var route: ConnectionRoute?
     @Published private(set) var device: SavedMac
     @Published private(set) var hostInfo: HostInfo?
     @Published private(set) var inputSources: [InputSourceInfo] = []
@@ -63,6 +71,8 @@ final class RemoteClient: ObservableObject {
     private let tailnet: TailnetController?
     private var connection: NWConnection?
     private var racing: [NWConnection] = []
+    /// 每個候選連線走的路徑（候選連線被採用時才會用到）
+    private var candidateRoutes: [ObjectIdentifier: ConnectionRoute] = [:]
     private var channel: MessageChannel?
     private var generation = 0 {
         didSet { media.withLock { $0.generation = generation } }
@@ -78,6 +88,7 @@ final class RemoteClient: ObservableObject {
     private var raceLastError: NWError?
     private var pendingTailnetDials = 0
     private var tailnetObserver: AnyCancellable?
+    private var tailnetPeersObserver: AnyCancellable?
     private var tlsFailures = 0
     private var userStopped = true
     private var hasConnectedOnce = false
@@ -117,6 +128,24 @@ final class RemoteClient: ObservableObject {
                 self.attempt = 0
                 self.openConnection()
             }
+        }
+        // 對端的直連／中繼狀態會變，通知畫面重新計算連線路徑的文字
+        tailnetPeersObserver = tailnet?.$peers.sink { [weak self] _ in
+            DispatchQueue.main.async { self?.objectWillChange.send() }
+        }
+    }
+
+    /// 連線路徑的顯示文字，例如「區網」「Tailscale 直連」「Tailscale 中繼（tyo）」
+    var routeDescription: String? {
+        guard state == .connected, let route else { return nil }
+        switch route {
+        case .lan:
+            return "區網"
+        case .tailnet(let ip):
+            let peer = tailnet?.peers.first { $0.ipv4 == ip }
+            if peer?.directAddress != nil { return "Tailscale 直連" }
+            if let relay = peer?.relay { return "Tailscale 中繼（\(relay)）" }
+            return "Tailscale"
         }
     }
 
@@ -235,6 +264,7 @@ final class RemoteClient: ObservableObject {
         connection = nil
         channel = nil
         racing = []
+        candidateRoutes = [:]
     }
 
     /// 同時向所有候選位址發起加密連線，最先完成的勝出，其餘取消
@@ -271,7 +301,7 @@ final class RemoteClient: ObservableObject {
         raceLastError = nil
         pendingTailnetDials = 0
         for endpoint in endpoints {
-            startCandidate(endpoint, psk: psk, paired: credential != nil, gen: gen)
+            startCandidate(endpoint, psk: psk, paired: credential != nil, gen: gen, route: .lan)
         }
         // 內嵌 Tailscale：先在 tailnet 上撥號，成功後才加入競賽
         if let node = tailnet?.node {
@@ -281,7 +311,8 @@ final class RemoteClient: ObservableObject {
                     guard let self, gen == self.generation else { return }
                     self.pendingTailnetDials -= 1
                     if let endpoint, self.connection == nil {
-                        self.startCandidate(endpoint, psk: psk, paired: credential != nil, gen: gen)
+                        self.startCandidate(endpoint, psk: psk, paired: credential != nil, gen: gen,
+                                            route: .tailnet(ip: host))
                     } else {
                         self.raceCandidateFinished(gen, paired: credential != nil)
                     }
@@ -296,9 +327,11 @@ final class RemoteClient: ObservableObject {
         }
     }
 
-    private func startCandidate(_ endpoint: NWEndpoint, psk: PSKCredential, paired: Bool, gen: Int) {
+    private func startCandidate(_ endpoint: NWEndpoint, psk: PSKCredential, paired: Bool, gen: Int,
+                                route: ConnectionRoute) {
         let candidate = NWConnection(to: endpoint, using: SecureTransport.parameters(credentials: [psk]))
         racing.append(candidate)
+        candidateRoutes[ObjectIdentifier(candidate)] = route
         candidate.stateUpdateHandler = { [weak self, weak candidate] newState in
           DispatchQueue.main.async {
             guard let self, let candidate, gen == self.generation else { return }
@@ -347,6 +380,7 @@ final class RemoteClient: ObservableObject {
     }
 
     private func adopt(_ connection: NWConnection, gen: Int) {
+        route = candidateRoutes.removeValue(forKey: ObjectIdentifier(connection)) ?? .lan
         racing.removeAll { $0 === connection }
         racing.forEach { $0.cancel() }
         racing = []

@@ -88,10 +88,14 @@ final class RemoteClient: ObservableObject {
     private var lastPathSatisfied = true
     private var pingSentAt: [UInt64: Date] = [:]
     private var nextPingID: UInt64 = 0
+    /// 最近的 RTT 樣本（毫秒），顯示中位數以減少單次量測的跳動
+    private var rttSamples: [Int] = []
     private var lastKeyframeRequest = Date.distantPast
     private let decoder = JSONDecoder()
 
-    private static let heartbeatInterval: TimeInterval = 2
+    /// 每 0.25 秒送一次 ping：同時是存活偵測，也讓 Wi‑Fi 電台保持醒著（閒置後第一個操作才不會多等）
+    private static let heartbeatInterval: TimeInterval = 0.25
+    private static let rttWindow = 20
     private static let deadAfter: TimeInterval = 7
     private static let connectTimeout: TimeInterval = 8
 
@@ -439,7 +443,10 @@ final class RemoteClient: ObservableObject {
             state = .connected
         case .pong(let id):
             if let sent = pingSentAt.removeValue(forKey: id) {
-                latencyMs = Int(Date().timeIntervalSince(sent) * 1000)
+                rttSamples.append(Int(Date().timeIntervalSince(sent) * 1000))
+                if rttSamples.count > Self.rttWindow { rttSamples.removeFirst(rttSamples.count - Self.rttWindow) }
+                let sorted = rttSamples.sorted()
+                latencyMs = sorted[sorted.count / 2]
             }
         case .inputSources(let list):
             inputSources = list
@@ -464,6 +471,8 @@ final class RemoteClient: ObservableObject {
 
     private func startHeartbeat() {
         heartbeat?.invalidate()
+        rttSamples.removeAll()
+        latencyMs = nil
         heartbeat = Timer.scheduledTimer(withTimeInterval: Self.heartbeatInterval, repeats: true) { [weak self] _ in
             self?.tick()
         }

@@ -287,6 +287,12 @@ final class BackspaceAwareTextField: UITextField {
             onToggleInputSource?()
             return
         }
+        // Shift + Return（Shift + Enter）：文字欄的 Return 只會送出不帶修飾鍵的 Return，所以這裡直接送到 Mac
+        if key.keyCode == .keyboardReturnOrEnter || key.keyCode == .keypadEnter,
+           key.modifierFlags.contains(.shift) {
+            onRawKey?(MacKey.returnKey, KeyMap.modifiers(from: key.modifierFlags))
+            return
+        }
         // ⌘ / ⌃ 組合鍵送到 Mac
         if !key.modifierFlags.intersection([.command, .control]).isEmpty,
            let code = KeyMap.macKeyCode(for: key.keyCode) {

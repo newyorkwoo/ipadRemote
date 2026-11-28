@@ -38,7 +38,7 @@ struct RemoteSessionView: View {
                 LiveTextField(placeholder: "", liveMode: true,
                               isFocused: $directFocused,
                               macInputSourceID: client.inputSources.first(where: \.isSelected)?.id,
-                              onInsert: { text in client.send(.text(text, usePaste: true)) },
+                              onInsert: { text in client.send(.text(text, usePaste: false)) },
                               onDelete: { count in
                                   for _ in 0..<count { client.send(.keyPress(keyCode: MacKey.delete, modifiers: [])) }
                               },

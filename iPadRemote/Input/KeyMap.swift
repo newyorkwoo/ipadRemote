@@ -40,7 +40,7 @@ enum KeyMap {
         for (i, code) in fkeys.enumerated() { t[58 + i] = code }
 
         let others: [Int: UInt16] = [
-            40: MacKey.returnKey, 41: MacKey.escape, 42: MacKey.delete, 43: MacKey.tab, 44: MacKey.space,
+            40: MacKey.returnKey, 88: MacKey.returnKey /* 小鍵盤 Enter */, 41: MacKey.escape, 42: MacKey.delete, 43: MacKey.tab, 44: MacKey.space,
             45: 0x1B /* - */, 46: 0x18 /* = */, 47: 0x21 /* [ */, 48: 0x1E /* ] */, 49: 0x2A /* \ */,
             51: 0x29 /* ; */, 52: 0x27 /* ' */, 53: 0x32 /* ` */, 54: 0x2B /* , */, 55: 0x2F /* . */,
             56: 0x2C /* / */, 57: MacKey.capsLock,

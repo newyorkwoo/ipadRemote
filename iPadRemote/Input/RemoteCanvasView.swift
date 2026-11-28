@@ -350,7 +350,7 @@ final class RemoteCanvasView: UIView, UIGestureRecognizerDelegate, UIPointerInte
     override var keyCommands: [UIKeyCommand]? { Self.systemKeyCommands }
 
     private static let systemKeys: [(input: String, code: UInt16)] = [
-        (" ", MacKey.space), ("\r", MacKey.returnKey), ("\t", MacKey.tab),
+        (" ", MacKey.space), ("\r", MacKey.returnKey), ("\n", MacKey.returnKey), ("\t", MacKey.tab),
         (UIKeyCommand.inputEscape, MacKey.escape),
         (UIKeyCommand.inputUpArrow, MacKey.up), (UIKeyCommand.inputDownArrow, MacKey.down),
         (UIKeyCommand.inputLeftArrow, MacKey.left), (UIKeyCommand.inputRightArrow, MacKey.right),

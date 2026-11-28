@@ -18,11 +18,18 @@ struct LiveTextField: UIViewRepresentable {
     var onInsert: (String) -> Void
     var onDelete: (Int) -> Void
     var onReturn: (String) -> Void
+    /// 直送模式（遠端畫面注音直打）：非文字按鍵（方向鍵、Esc、Tab、⌘ 組合）送到 Mac，中/英鍵切換 Mac 輸入法
+    var directMode: Bool = false
+    var onRawKey: (UInt16, Modifiers) -> Void = { _, _ in }
+    var onToggleInputSource: () -> Void = {}
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeUIView(context: Context) -> BackspaceAwareTextField {
         let field = BackspaceAwareTextField()
+        field.directMode = directMode
+        field.onRawKey = onRawKey
+        field.onToggleInputSource = onToggleInputSource
         field.placeholder = placeholder
         field.accessibilityIdentifier = "remoteTextField"
         field.font = .preferredFont(forTextStyle: .body)
@@ -51,6 +58,9 @@ struct LiveTextField: UIViewRepresentable {
         context.coordinator.parent = self
         field.macInputSourceID = macInputSourceID
         field.onKeyboardChanged = onKeyboardChanged
+        field.directMode = directMode
+        field.onRawKey = onRawKey
+        field.onToggleInputSource = onToggleInputSource
         if wasLive != liveMode || oldToken != resetToken {
             context.coordinator.committed = ""
             field.text = ""
@@ -87,9 +97,25 @@ struct LiveTextField: UIViewRepresentable {
             syncCommittedText(field)
         }
 
+        /// 直送模式：目前顯示在 Mac 上的組字文字（注音）。組字改變時先刪掉舊的，再貼上新的，讓 Mac 上看得到注音
+        private var mirrored = ""
+
+        private func mirrorComposition(_ field: UITextField) {
+            guard parent.directMode else { return }
+            var marked = ""
+            if let range = field.markedTextRange, !range.isEmpty, let text = field.text(in: range) {
+                marked = text
+            }
+            guard marked != mirrored else { return }
+            if !mirrored.isEmpty { parent.onDelete(mirrored.count) }
+            if !marked.isEmpty { parent.onInsert(marked) }
+            mirrored = marked
+        }
+
         /// 把「已確定」的文字與上次送出的內容比對，只送出差異；重複呼叫不會重複送出
         private func syncCommittedText(_ field: UITextField) {
             guard parent.liveMode else { return }
+            mirrorComposition(field)
             // 輸入法仍在組字（有底線的候選文字）時不送出；空的標記範圍視為已確定
             if let marked = field.markedTextRange, !marked.isEmpty {
                 wasComposing = true
@@ -206,6 +232,68 @@ final class BackspaceAwareTextField: UITextField {
             }
             view = current.superview
         }
+    }
+
+    // MARK: 直送模式（遠端注音直打）
+
+    var directMode = false
+    var onRawKey: ((UInt16, Modifiers) -> Void)?
+    var onToggleInputSource: (() -> Void)?
+
+    /// 輸入法正在組字（有底線的注音）時，方向鍵、空白鍵等都交給輸入法
+    private var composing: Bool { !(markedTextRange?.isEmpty ?? true) }
+
+    private static let rawKeys: [(input: String, code: UInt16)] = [
+        (UIKeyCommand.inputUpArrow, MacKey.up), (UIKeyCommand.inputDownArrow, MacKey.down),
+        (UIKeyCommand.inputLeftArrow, MacKey.left), (UIKeyCommand.inputRightArrow, MacKey.right),
+        (UIKeyCommand.inputEscape, MacKey.escape), ("\t", MacKey.tab),
+    ]
+
+    private static let rawKeyCommands: [UIKeyCommand] = {
+        let modifiers: [UIKeyModifierFlags] = [.shift, .control, .alternate, .command]
+        let combos: [UIKeyModifierFlags] = (0..<(1 << modifiers.count)).map { mask in
+            modifiers.enumerated().reduce(into: UIKeyModifierFlags()) { result, item in
+                if mask & (1 << item.offset) != 0 { result.insert(item.element) }
+            }
+        }
+        return rawKeys.flatMap { key in
+            combos.map { flags in
+                let command = UIKeyCommand(input: key.input, modifierFlags: flags,
+                                           action: #selector(handleRawKeyCommand(_:)))
+                command.wantsPriorityOverSystemBehavior = true
+                return command
+            }
+        }
+    }()
+
+    override var keyCommands: [UIKeyCommand]? {
+        guard directMode, !composing else { return nil }
+        return Self.rawKeyCommands
+    }
+
+    @objc private func handleRawKeyCommand(_ command: UIKeyCommand) {
+        guard let input = command.input,
+              let code = Self.rawKeys.first(where: { $0.input == input })?.code else { return }
+        onRawKey?(code, KeyMap.modifiers(from: command.modifierFlags))
+    }
+
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        guard directMode, let key = presses.first?.key, !composing else {
+            super.pressesBegan(presses, with: event)
+            return
+        }
+        // 中/英鍵（Flip Folio 送出 Caps Lock）→ 切換 Mac 的注音 / 英文
+        if key.keyCode.rawValue == 57, key.modifierFlags.subtracting(.alphaShift).isEmpty {
+            onToggleInputSource?()
+            return
+        }
+        // ⌘ / ⌃ 組合鍵送到 Mac
+        if !key.modifierFlags.intersection([.command, .control]).isEmpty,
+           let code = KeyMap.macKeyCode(for: key.keyCode) {
+            onRawKey?(code, KeyMap.modifiers(from: key.modifierFlags))
+            return
+        }
+        super.pressesBegan(presses, with: event)
     }
 
     override func deleteBackward() {

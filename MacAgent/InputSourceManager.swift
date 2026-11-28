@@ -39,6 +39,22 @@ enum InputSourceManager {
         return TISSelectInputSource(source) == noErr
     }
 
+    static let zhuyinID = "com.apple.inputmethod.TCIM.Zhuyin"
+    static let abcID = "com.apple.keylayout.ABC"
+
+    /// 注音 ↔ ABC 英文鍵盤。不用 selectNext，因為它會輪到其他輸入法；
+    /// 注音自己的英文模式可能是全形，所以英文直接選純 ABC 鍵盤。
+    /// 若找不到這兩個輸入法（例如 Mac 上沒有啟用），退回 selectNext。
+    static func toggleChineseEnglish() {
+        let all = list()
+        guard all.contains(where: { $0.id == zhuyinID }), all.contains(where: { $0.id == abcID }) else {
+            selectNext()
+            return
+        }
+        let current = all.first(where: \.isSelected)?.id
+        select(id: current == abcID ? zhuyinID : abcID)
+    }
+
     static func selectNext() {
         let all = list()
         guard !all.isEmpty else { return }

@@ -564,7 +564,7 @@ extension ClientMessage {
     var isUserInput: Bool {
         switch self {
         case .mouseMove, .mouseMoveRelative, .mouseButton, .click, .scroll,
-             .key, .keyPress, .text, .selectInputSource, .nextInputSource:
+             .key, .keyPress, .text, .selectInputSource, .nextInputSource, .toggleChineseEnglish:
             return true
         default:
             return false

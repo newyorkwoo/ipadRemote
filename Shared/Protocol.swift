@@ -250,6 +250,8 @@ enum ClientMessage: Codable {
     case text(String, usePaste: Bool)
     case selectInputSource(id: String)
     case nextInputSource
+    /// 在 Mac 的注音與 ABC 英文鍵盤之間切換（英文用純 ABC，不會變成全形）
+    case toggleChineseEnglish
     case selectDisplay(id: UInt32)
     case setQuality(StreamQuality)
     case requestKeyframe

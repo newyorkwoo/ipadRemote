@@ -1,3 +1,4 @@
+import Carbon
 import Foundation
 import CoreGraphics
 import AppKit
@@ -120,9 +121,46 @@ final class InputInjector {
             return
         }
         guard let event = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: down) else { return }
-        event.flags = cgFlags(modifiers.union(heldModifiers))
+        var flags = cgFlags(modifiers.union(heldModifiers))
+        // macOS 的方向鍵、Home/End/PageUp/PageDown/Forward Delete 硬體事件會帶 fn 與 numpad 旗標；
+        // 注音等輸入法靠這些旗標辨識方向鍵（選字），沒有的話選字會失效
+        if Self.navigationKeyCodes.contains(keyCode) {
+            flags.insert([.maskSecondaryFn, .maskNumericPad])
+        }
+        event.flags = flags
+        // 硬體鍵盤事件會帶上字元（例如 s），注入事件若沒有，VS Code 等 App 會直接插入英文、不經過注音組字。
+        // 依 ABC 鍵盤布局算出字元並寫入事件。
+        let chars = Self.translatedChars(keyCode: keyCode, shift: modifiers.union(heldModifiers).contains(.shift))
+        if !chars.isEmpty {
+            event.keyboardSetUnicodeString(stringLength: chars.utf16.count, unicodeString: Array(chars.utf16))
+        }
+        event.setIntegerValueField(.keyboardEventKeyboardType, value: 40)
         post(event)
     }
+
+    /// 依 ABC（ASCII）鍵盤布局算出按鍵對應的字元；方向鍵等沒有字元的回傳空字串
+    static func translatedChars(keyCode: UInt16, shift: Bool) -> String {
+        guard let src = TISCopyCurrentASCIICapableKeyboardLayoutInputSource()?.takeRetainedValue(),
+              let raw = TISGetInputSourceProperty(src, kTISPropertyUnicodeKeyLayoutData) else { return "" }
+        let layout = Unmanaged<CFData>.fromOpaque(raw).takeUnretainedValue() as Data
+        var deadKeyState: UInt32 = 0
+        var length = 0
+        var chars = [UniChar](repeating: 0, count: 4)
+        let modifierState: UInt32 = shift ? 0x02 : 0 // Carbon shiftKey (0x0200) 右移 8 位
+        let status = layout.withUnsafeBytes { buffer -> OSStatus in
+            guard let base = buffer.bindMemory(to: UCKeyboardLayout.self).baseAddress else { return OSStatus(paramErr) }
+            return UCKeyTranslate(base, keyCode, UInt16(kUCKeyActionDown), modifierState, 40,
+                                  OptionBits(kUCKeyTranslateNoDeadKeysBit), &deadKeyState, 4, &length, &chars)
+        }
+        guard status == noErr else { return "" }
+        return String(utf16CodeUnits: chars, count: length)
+    }
+
+    private static let navigationKeyCodes: Set<UInt16> = [
+        0x7B, 0x7C, 0x7D, 0x7E, // ← → ↓ ↑
+        0x73, 0x77, 0x74, 0x79, // Home End PageUp PageDown
+        0x75,                   // Forward Delete
+    ]
 
     func keyPress(_ keyCode: UInt16, modifiers: Modifiers) {
         key(keyCode, down: true, modifiers: modifiers)

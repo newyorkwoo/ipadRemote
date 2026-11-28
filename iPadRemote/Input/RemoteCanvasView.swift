@@ -383,7 +383,13 @@ final class RemoteCanvasView: UIView, UIGestureRecognizerDelegate, UIPointerInte
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         var handled = false
         for press in presses {
-            guard let key = press.key, let code = KeyMap.macKeyCode(for: key.keyCode) else { continue }
+            guard let key = press.key else { continue }
+            if KeyMap.isInputSourceToggle(key) {
+                send(.toggleChineseEnglish)
+                handled = true
+                continue
+            }
+            guard let code = KeyMap.macKeyCode(for: key.keyCode) else { continue }
             send(.key(keyCode: code, down: true, modifiers: KeyMap.modifiers(from: key.modifierFlags)))
             handled = true
         }
@@ -393,7 +399,12 @@ final class RemoteCanvasView: UIView, UIGestureRecognizerDelegate, UIPointerInte
     override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         var handled = false
         for press in presses {
-            guard let key = press.key, let code = KeyMap.macKeyCode(for: key.keyCode) else { continue }
+            guard let key = press.key else { continue }
+            if KeyMap.isInputSourceToggle(key) {
+                handled = true
+                continue
+            }
+            guard let code = KeyMap.macKeyCode(for: key.keyCode) else { continue }
             send(.key(keyCode: code, down: false, modifiers: KeyMap.modifiers(from: key.modifierFlags)))
             handled = true
         }

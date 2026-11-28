@@ -6,6 +6,16 @@ enum KeyMap {
         table[usage.rawValue]
     }
 
+    /// 實體鍵盤的「中/英」鍵：不轉成按鍵，改為切換 Mac 的輸入法（注音 ↔ 英文）。
+    /// Flip Folio 的「中/英」實際送出 Caps Lock（HID 57）；單獨按下才切換，⇧+Caps Lock 仍送出 Caps Lock。
+    /// LANG1 / LANG2（144 / 145）也一併視為切換鍵。
+    static func isInputSourceToggle(_ key: UIKey) -> Bool {
+        let usage = key.keyCode.rawValue
+        if usage == 144 || usage == 145 { return true }
+        // .alphaShift 是 Caps Lock 的狀態旗標，不算修飾鍵
+        return usage == 57 && key.modifierFlags.subtracting(.alphaShift).isEmpty
+    }
+
     static func modifiers(from flags: UIKeyModifierFlags) -> Modifiers {
         var m: Modifiers = []
         if flags.contains(.command) { m.insert(.command) }

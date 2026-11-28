@@ -12,19 +12,45 @@ struct RemoteSessionView: View {
     @State private var stickyModifiers: Modifiers = []
     @State private var showKeyboard = false
     @State private var textFocused = false
+    @State private var directFocused = false
     @State private var toolbarExpanded = true
+
+    /// Mac 目前選中的是注音（且使用者開啟直打）：遠端按鍵直接走 iPad 注音組字
+    private var directActive: Bool {
+        liveTyping && client.state == .connected
+            && (client.inputSources.first(where: \.isSelected)?.id.contains("Zhuyin") ?? false)
+    }
 
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
 
             RemoteScreen(client: client, trackpadMode: trackpadMode, stickyModifiers: $stickyModifiers,
-                         textInputActive: showKeyboard && textFocused)
+                         textInputActive: (showKeyboard && textFocused) || directActive)
                 .focusEffectDisabled()   // 遠端畫面拿到鍵盤焦點時不顯示藍框
                 .ignoresSafeArea()
                 .opacity(client.state == .connected ? 1 : 0.35)
                 .blur(radius: client.state == .connected ? 0 : 8)
                 .animation(.easeInOut(duration: 0.3), value: client.state == .connected)
+
+            // 注音直打：Mac 目前是注音、且遠端畫面可輸入時，按鍵交給 iPad 的注音輸入法組字，選定的中文送到 Mac 的 VS Code 等 App
+            if directActive {
+                LiveTextField(placeholder: "", liveMode: true,
+                              isFocused: $directFocused,
+                              macInputSourceID: client.inputSources.first(where: \.isSelected)?.id,
+                              onInsert: { text in client.send(.text(text, usePaste: true)) },
+                              onDelete: { count in
+                                  for _ in 0..<count { client.send(.keyPress(keyCode: MacKey.delete, modifiers: [])) }
+                              },
+                              onReturn: { _ in client.send(.keyPress(keyCode: MacKey.returnKey, modifiers: [])) },
+                              directMode: true,
+                              onRawKey: { code, modifiers in client.send(.keyPress(keyCode: code, modifiers: modifiers)) },
+                              onToggleInputSource: { client.send(.toggleChineseEnglish) })
+                    .frame(width: 1, height: 1)
+                    .opacity(0.01)
+                    .allowsHitTesting(false)
+                    .onAppear { directFocused = true }
+            }
 
             if client.state != .connected {
                 ConnectionStatusCard(client: client, onClose: close)
@@ -42,7 +68,9 @@ struct RemoteSessionView: View {
                                   liveTyping: $liveTyping,
                                   usePaste: $usePaste,
                                   stickyModifiers: $stickyModifiers,
-                                  textFocused: $textFocused,
+                                  // 注音直打時面板的輸入框不取得焦點，文字直接走遠端畫面
+                                  textFocused: Binding(get: { textFocused && !directActive },
+                                                       set: { textFocused = $0 }),
                                   onHide: { withAnimation(.spring) { showKeyboard = false; textFocused = false } })
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }

@@ -378,6 +378,8 @@ final class ClientSession {
             DispatchQueue.main.async { InputSourceManager.select(id: id) }
         case .nextInputSource:
             DispatchQueue.main.async { InputSourceManager.selectNext() }
+        case .toggleChineseEnglish:
+            DispatchQueue.main.async { InputSourceManager.toggleChineseEnglish() }
 
         case let .selectDisplay(id):
             displayID = id
